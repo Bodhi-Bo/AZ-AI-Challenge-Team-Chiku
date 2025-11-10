@@ -5,16 +5,27 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff } from "lucide-react";
 import { useSpeechToText } from "@/lib/speechToText";
 import { useStore } from "@/lib/store";
+import { useMascot } from "@/lib/mascotStore";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 
 export default function VoiceButton() {
   const [showTranscript, setShowTranscript] = useState(false);
-  const { isListening, setListening, addMessage } = useStore();
-  
-  const { transcript, isListening: isListeningState, startListening, stopListening, error } = useSpeechToText({
+  const { setListening, addMessage } = useStore();
+  const { think, setEmotion } = useMascot();
+
+  const {
+    transcript,
+    isListening: isListeningState,
+    startListening,
+    stopListening,
+    error,
+  } = useSpeechToText({
     onFinalTranscript: async (finalTranscript) => {
       if (finalTranscript.trim()) {
+        // Mascot starts thinking
+        think();
+
         // Add user message
         const userMessage = {
           id: Date.now().toString(),
@@ -24,7 +35,7 @@ export default function VoiceButton() {
           isVoice: true,
         };
         addMessage(userMessage);
-        
+
         // Send to API
         try {
           const response = await fetch("/api/chat", {
@@ -40,7 +51,7 @@ export default function VoiceButton() {
           }
 
           const data = await response.json();
-          
+
           // Add assistant message
           const assistantMessage = {
             id: (Date.now() + 1).toString(),
@@ -49,9 +60,17 @@ export default function VoiceButton() {
             timestamp: new Date(),
           };
           addMessage(assistantMessage);
+
+          // Mascot shows happy emotion
+          setEmotion("happy");
+          setTimeout(() => setEmotion("idle"), 3000);
         } catch (err) {
           console.error("Error sending message:", err);
           toast.error("Failed to send message. Please try again.");
+
+          // Mascot shows tired/error emotion
+          setEmotion("tired");
+          setTimeout(() => setEmotion("idle"), 3000);
         }
       }
       setShowTranscript(false);
@@ -111,9 +130,10 @@ export default function VoiceButton() {
         className={`
           relative w-20 h-20 rounded-full flex items-center justify-center
           shadow-lg transition-all duration-300
-          ${isListeningState
-            ? "bg-gradient-to-br from-red-500 to-red-600"
-            : "bg-gradient-to-br from-indigo-500 to-indigo-600"
+          ${
+            isListeningState
+              ? "bg-gradient-to-br from-red-500 to-red-600"
+              : "bg-gradient-to-br from-indigo-500 to-indigo-600"
           }
           hover:scale-105 active:scale-95
           focus:outline-none focus:ring-4 focus:ring-indigo-300 dark:focus:ring-indigo-800
@@ -170,4 +190,3 @@ export default function VoiceButton() {
     </div>
   );
 }
-

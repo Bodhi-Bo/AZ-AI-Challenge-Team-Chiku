@@ -16,20 +16,20 @@ export default function Home() {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-gray-900">
       {/* Header */}
       <Header />
 
       {/* Main content */}
       <main className="flex-1 flex overflow-hidden mt-16">
-        {/* Chat Side (Left) */}
+        {/* Chat Side (Left) - Scrollable */}
         <AnimatePresence mode="wait">
           {(!isMobile || mobileView === "chat") && (
             <motion.div
@@ -38,13 +38,13 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="w-full md:w-2/5 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-gray-50 dark:bg-gray-800"
+              className="w-full md:w-2/5 border-r border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden"
             >
               <ChatInterface />
             </motion.div>
           )}
 
-          {/* Calendar Side (Right) */}
+          {/* Calendar Side (Right) - Scrollable */}
           {(!isMobile || mobileView === "calendar") && (
             <motion.div
               key="calendar"
@@ -52,7 +52,9 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.3 }}
-              className={`${isMobile ? "w-full" : "hidden md:flex md:w-3/5"} flex-col`}
+              className={`${
+                isMobile ? "w-full" : "hidden md:flex md:w-3/5"
+              } flex-col overflow-hidden`}
             >
               <CalendarView />
             </motion.div>
@@ -62,12 +64,12 @@ export default function Home() {
 
       {/* Mobile view toggle */}
       {isMobile && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50 flex gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full p-1 shadow-lg">
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 flex gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full p-2 shadow-2xl">
           <Button
             variant={mobileView === "chat" ? "default" : "ghost"}
             size="sm"
             onClick={() => setMobileView("chat")}
-            className="rounded-full"
+            className="rounded-full px-4"
           >
             <MessageSquare className="h-4 w-4 mr-2" />
             Chat
@@ -76,7 +78,7 @@ export default function Home() {
             variant={mobileView === "calendar" ? "default" : "ghost"}
             size="sm"
             onClick={() => setMobileView("calendar")}
-            className="rounded-full"
+            className="rounded-full px-4"
           >
             <Calendar className="h-4 w-4 mr-2" />
             Calendar

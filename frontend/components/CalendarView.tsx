@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
-import type { DateSelectArg, EventClickArg, EventDropArg } from "@fullcalendar/core";
+import type {
+  DateSelectArg,
+  EventClickArg,
+  EventDropArg,
+} from "@fullcalendar/core";
 import { useStore } from "@/lib/store";
 import type { CalendarEvent } from "@/types";
 import {
@@ -19,12 +23,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Trash2, Edit } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 export default function CalendarView() {
   const { events, addEvent, updateEvent, deleteEvent } = useStore();
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [eventTitle, setEventTitle] = useState("");
@@ -63,7 +66,6 @@ export default function CalendarView() {
   }
 
   const handleDateSelect = (selectInfo: DateSelectArg) => {
-    setSelectedDate(selectInfo.start);
     setEventStart(selectInfo.start);
     setEventEnd(selectInfo.end);
     setEventTitle("");
@@ -136,38 +138,53 @@ export default function CalendarView() {
   // No need for manual updates
 
   return (
-    <div className="h-full w-full bg-white dark:bg-gray-900 p-4 adhd-friendly-calendar">
-      <FullCalendar
-        ref={calendarRef}
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
-        headerToolbar={{
-          left: "prev,next today",
-          center: "title",
-          right: "dayGridMonth,timeGridWeek,timeGridDay",
-        }}
-        events={calendarEvents}
-        editable={true}
-        droppable={true}
-        selectable={true}
-        selectMirror={true}
-        dayMaxEvents={true}
-        weekends={true}
-        select={handleDateSelect}
-        eventClick={handleEventClick}
-        eventDrop={handleEventDrop}
-        height="100%"
-        slotMinTime="06:00:00"
-        slotMaxTime="24:00:00"
-        allDaySlot={false}
-        nowIndicator={true}
-        eventDisplay="block"
-        eventTimeFormat={{
-          hour: "numeric",
-          minute: "2-digit",
-          meridiem: "short",
-        }}
-      />
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+      {/* Header */}
+      <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800 shrink-0">
+        <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+          Schedule
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          Manage your tasks and events
+        </p>
+      </div>
+
+      {/* Calendar Container - Scrollable */}
+      <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="max-w-full">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{
+              left: "prev,next today",
+              center: "title",
+              right: "dayGridMonth,timeGridWeek,timeGridDay",
+            }}
+            events={calendarEvents}
+            editable={true}
+            droppable={true}
+            selectable={true}
+            selectMirror={true}
+            dayMaxEvents={true}
+            weekends={true}
+            select={handleDateSelect}
+            eventClick={handleEventClick}
+            eventDrop={handleEventDrop}
+            height="auto"
+            slotMinTime="06:00:00"
+            slotMaxTime="24:00:00"
+            allDaySlot={false}
+            nowIndicator={true}
+            eventDisplay="block"
+            eventTimeFormat={{
+              hour: "numeric",
+              minute: "2-digit",
+              meridiem: "short",
+            }}
+          />
+        </div>
+      </div>
 
       {/* Event Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -195,7 +212,9 @@ export default function CalendarView() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Description</label>
+              <label className="text-sm font-medium mb-2 block">
+                Description
+              </label>
               <Textarea
                 value={eventDescription}
                 onChange={(e) => setEventDescription(e.target.value)}
@@ -208,7 +227,9 @@ export default function CalendarView() {
             {eventStart && eventEnd && (
               <div className="space-y-2">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">Start</label>
+                  <label className="text-sm font-medium mb-2 block">
+                    Start
+                  </label>
                   <Input
                     type="datetime-local"
                     value={format(eventStart, "yyyy-MM-dd'T'HH:mm")}
@@ -255,26 +276,77 @@ export default function CalendarView() {
       </Dialog>
 
       <style jsx global>{`
-        .adhd-friendly-calendar {
-          font-size: 16px;
+        .fc {
+          font-family: inherit;
         }
-        .adhd-friendly-calendar .fc-event {
-          border-radius: 8px;
-          padding: 4px 8px;
+        .fc .fc-toolbar-title {
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: #111827;
+        }
+        .dark .fc .fc-toolbar-title {
+          color: #f3f4f6;
+        }
+        .fc .fc-button {
+          background: white;
+          border: 1px solid #e5e7eb;
+          color: #374151;
+          border-radius: 0.5rem;
+          padding: 0.5rem 1rem;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+        .fc .fc-button:hover {
+          background: #f9fafb;
+          border-color: #d1d5db;
+        }
+        .fc .fc-button-primary:not(:disabled).fc-button-active {
+          background: #4f46e5;
+          border-color: #4f46e5;
+          color: white;
+        }
+        .fc .fc-col-header-cell {
+          padding: 1rem 0.5rem;
+          font-weight: 600;
+          font-size: 0.875rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: #6b7280;
+        }
+        .fc .fc-daygrid-day-number,
+        .fc .fc-timegrid-slot-label {
+          padding: 0.5rem;
+          color: #374151;
           font-weight: 500;
         }
-        .adhd-friendly-calendar .fc-event-title {
-          font-size: 14px;
+        .dark .fc .fc-daygrid-day-number,
+        .dark .fc .fc-timegrid-slot-label {
+          color: #d1d5db;
         }
-        .adhd-friendly-calendar .fc-timegrid-now-indicator-line {
-          border-color: #EF4444;
+        .fc .fc-event {
+          border-radius: 0.5rem;
+          padding: 0.25rem 0.5rem;
+          font-weight: 500;
+          border: none;
+          box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        }
+        .fc .fc-event-title {
+          font-size: 0.875rem;
+        }
+        .fc .fc-timegrid-now-indicator-line {
+          border-color: #ef4444;
           border-width: 2px;
         }
-        .adhd-friendly-calendar .fc-day-today {
-          background-color: rgba(99, 102, 241, 0.05);
+        .fc .fc-day-today {
+          background-color: rgba(79, 70, 229, 0.05) !important;
+        }
+        .fc .fc-scrollgrid {
+          border-color: #f3f4f6;
+        }
+        .dark .fc .fc-scrollgrid {
+          border-color: #374151;
         }
       `}</style>
     </div>
   );
 }
-
