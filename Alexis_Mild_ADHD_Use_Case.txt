@@ -1,0 +1,77 @@
+User Profile: Alexis (Mild ADHD)
+Age: 20
+Diagnosis: Mild ADHD
+Major: Finance (Undergraduate)
+Job: Campus barista
+Strengths: - Sociable and quick thinker under time pressure - Good with real-world applications and teamwork - Can stay engaged with structure and small goals
+Struggles: - Procrastinates on longer assignments - Has trouble switching from work to study mode - Time blindness and inconsistent energy levels
+Preferred Focus Times: Evenings (6 PM – 9 PM) Reward System: Coffee or social treat after completing work
+Base Schedule (Next Two Weeks)
+Day	Events
+Mon	Work 8:00 AM – 12:00 PM, Finance class 2:00 – 3:30 PM
+Tue	Economics lecture 9:30 – 11:00 AM, Free afternoon
+Wed	Work 8:00 AM – 12:00 PM, Church group 5:00 – 6:00 PM
+Thu	Statistics class 10:00 – 11:30 AM
+Fri	Work 8:00 AM – 12:00 PM, Gym 5:30 – 6:30 PM
+Sat	Free day
+Sun	Free day
+(Pattern repeats the following week.)
+________________________________________
+Script 1: Complex Task — Needs Decomposer
+User: “Hey Chiku, I have this group finance project due next Thursday and I don’t even know where to start. There’s data, a report, and a presentation part.”
+Chiku: “Got it, Alex. Let’s make sure you get it done without feeling swamped. When are you working this week?”
+User: “Same as usual, mornings Monday, Wednesday, and Friday.”
+Chiku: “Perfect. Do you want to work on this in the evenings?”
+User: “Yeah, evenings are better.”
+Chiku: “Alright, I’ll break this project into smaller parts like data collection, writing, and slide creation so it’s easier to manage.”
+Chiku → [SEND_TO_DECOMPOSER]:
+{
+  "task_description": "Complete finance group project with data analysis, written report, and presentation slides",
+  "deadline": "2025-11-20",
+  "constraints": ["Work MWF 8:00-12:00", "Prefer evenings 18:00-21:00"]
+}
+Decomposer Response: Breaks task into subtasks: data research, spreadsheet setup, report writing, slide design, practice presentation.
+Chiku: “Here’s the plan: 
+Monday 6:00 – 6:30pm, research, set up spreadsheets 
+Tuesday 6:00 – 6:30pm, write the report 
+Wednesday 7:00 – 7:30pm make slides
+Thursday 6:00 – 6:30pm, finalize slides 
+Friday 7:00 – 7:30pm rehearse presentation
+Want me to add these blocks to your calendar?”
+User: “Actually Friday doesn’t work for me, I am planning on getting dinner with a friend. Can you add that to the calendar and reschedule the Friday study block to Saturday afternoon at 1 instead?
+Chiku: “Yes, and should I put Friday at 7 – 8pm dinner with a friend?”
+ User: “Yes, but make it 7 – 9 pm. 
+Chiku: “Got it! here’s the updated plan: 
+Monday 6:00 – 6:30pm, research, set up spreadsheets 
+Tuesday 6:00 – 6:30pm, write the report 
+Wednesday 7:00 – 7:30pm make slides
+Thursday 6:00 – 6:30pm, finalize slides 
+Friday 7:00 – 9:00pm dinner with a friend
+Saturday: 1:00 – 1:30pm rehearse presentation
+Want me to add these blocks to your calendar?
+Chiku: [MCP_CALL → create_event] “All set!”
+________________________________________
+Script 2: Simple Event — No Decomposer
+User: “Can you add coffee with Taylor at 10 AM Saturday?”
+Chiku: “Sure thing. That’s your free day. I’ll add ‘Coffee with Taylor’ from 10:00 to 11:00 AM.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Coffee with Taylor",
+  "start": "2025-11-15T10:00:00-07:00",
+  "end": "2025-11-15T11:00:00-07:00"
+}
+Chiku: “Done! Hope it’s a relaxing catch-up.”
+________________________________________
+Script 3: Event Conflict — Requires Rescheduling
+User: “Can you schedule a tutoring session at 2 PM Monday?”
+Chiku (checks calendar): [MCP_CALL → list_events] > Finds existing “Finance class 2:00–3:30 PM”
+Chiku: “Hmm, you’ve got class at that time. Would 3:45 PM after your class or 12:30 PM before work fit better?”
+User: “Let’s do 3:45.”
+Chiku: “Perfect — I’ll book your tutoring session for 3:45–4:45 PM.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Finance tutoring session",
+  "start": "2025-11-10T15:45:00-07:00",
+  "end": "2025-11-10T16:45:00-07:00"
+}
+Chiku: “All set! You’re balancing work, class, and tutoring like a pro.”

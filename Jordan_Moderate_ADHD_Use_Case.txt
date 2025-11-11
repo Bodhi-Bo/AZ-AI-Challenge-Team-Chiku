@@ -1,0 +1,67 @@
+User Profile: Jordan (Moderate ADHD)
+Age: 17
+Diagnosis: Moderate ADHD
+Occupation: High School Senior, Esports Team Captain
+Academic Load: Honors and AP courses
+Strengths: - Great under pressure, strong leadership - Communicates well in team settings - Fast decision-making and adaptive
+Struggles: - Task initiation, especially for essays or reading - Overfocus (hyperfocus) on gaming - Difficulty switching between school and leisure
+Preferred Focus Times: Late afternoon before esports practice (3–5 PM)
+Motivator: Gamified challenges and reward time
+Base Schedule (Next Two Weeks)
+Day	Events
+Mon	School 8:00 AM – 3:00 PM, Esports practice 5:00 – 7:00 PM
+Tue	School 8:00 AM – 3:00 PM, Tutor block 4:00 – 5:00 PM
+Wed	School 8:00 AM – 3:00 PM, Esports practice 5:00 – 7:00 PM
+Thu	School 8:00 AM – 3:00 PM, Team meeting 6:00 – 7:00 PM
+Fri	School 8:00 AM – 3:00 PM, Free after 4:00 PM
+Sat	Tournament day 10:00 AM – 2:00 PM 
+Sun	Tutor Study block 4:00 – 5:00 PM
+(Pattern repeats next week.)
+________________________________________
+Script 1: Complex Task — Needs Decomposer
+User: “Chiku, I need to finish my English research paper on cyber ethics by next Monday. I keep zoning out when I try to start it.”
+Chiku: “Understood, Jordan. Let’s make it less overwhelming. When do you usually have practice this week?”
+User: “Same as usual — 5 to 7 every weekday.”
+Chiku: “Okay! How about we fit short focused blocks between school and practice?”
+User: “Yeah, short ones sound good.”
+Chiku → [SEND_TO_DECOMPOSER]:
+{
+  "task_description": "Write a 5-page English research paper on cyber ethics, including research, drafting, and revision.",
+  "deadline": "2025-11-17",
+  "constraints": ["Avoid 17:00–19:00 (practice)", "Prefer 15:30–16:30 work sessions"]
+}
+Decomposer Response: Breaks into research sources, outline, draft intro, draft body, revise.
+Chiku: “Mission plan ready!  - Tue 3:30–4:00 → Research sources
+- Wed 3:30–4:00 → Write outline + intro
+- Thu 3:30–4:00 → Body paragraphs
+- Fri 3:30–4:00 → Edit
+- Sun 3:30–4:00 → Finalize
+
+Want me to add these to your calendar?”
+User: “Yeah, that’s perfect.”
+Chiku: [MCP_CALL → create_event] “All set!”
+________________________________________
+Script 2: Simple Event — No Decomposer
+User: “Can you add ‘Hang out with team’ on Friday at 5?”
+Chiku: “Sure thing! You’re free after 4 that day. I’ll add it 5:00–7:00 PM.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Hang out with team",
+  "start": "2025-11-14T17:00:00-07:00",
+  "end": "2025-11-14T19:00:00-07:00"
+}
+Chiku: “Done! Enjoy your well-earned break.”
+________________________________________
+ Script 3: Event Conflict — Requires Rescheduling
+User: “Can you book a math tutoring session Thursday at 6 PM?”
+Chiku (checks calendar): [MCP_CALL → list_events] > Finds conflict with Team Meeting (6:00–7:00 PM)
+Chiku: “You’ve got your team meeting then. How about before practice at 4:00, or after at 7:15?”
+User: “Let’s do 4:00.”
+Chiku: “Got it — tutoring 4:00–5:00 Thursday, before practice.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Math tutoring session",
+  "start": "2025-11-13T16:00:00-07:00",
+  "end": "2025-11-13T17:00:00-07:00"
+}
+Chiku: “Done! That’ll keep you free for your team meeting later.”

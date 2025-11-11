@@ -1,0 +1,65 @@
+User Profile: Priya (Neurotypical)
+Age: 26
+Diagnosis: Neurotypical
+Occupation: Graduate Biology Student and Teaching Assistant
+Academic Focus: Genetics research and lab instruction
+Strengths: - Excellent self-organization and time management - Balances research and teaching duties efficiently - Uses consistent calendar systems
+Struggles: - Occasional overload balancing lab data analysis and grading - Mild stress from tight submission deadlines - Needs clarity when priorities overlap
+Preferred Focus Times: Morning for analysis (9 AM – 12 PM)
+Energy Profile: High in morning, moderate afternoon, low evening
+Base Schedule (Next Two Weeks)
+Day	Events
+Mon	Research lab 9:00 AM – 12:00 PM, Graduate seminar 2:00 – 3:30 PM
+Tue	Teach lab 1:00 – 3:00 PM, Grading block 3:30 – 5:00 PM
+Wed	Research lab 9:00 AM – 12:00 PM
+Thu	Teach lab 1:00 – 3:00 PM, Faculty meeting 4:00 – 5:00 PM
+Fri	Research lab 9:00 AM – 11:30 AM, Study group 2:00 – 3:00 PM
+Sat	Free day
+Sun	Personal errands – no set time
+(Repeats next week)
+________________________________________
+Script 1: Complex Task — Needs Decomposer
+User: “Chiku, I need to finish writing and formatting my genetics paper by next Friday. It’s a full publication draft.”
+Chiku: “Got it, Priya. That’s a big one. You’ve got lab blocks in the mornings — would you like to use those same hours for writing on off-days?”
+User: “Yes, that’s ideal.”
+Chiku → [SEND_TO_DECOMPOSER]:
+{
+  "task_description": "Write, format, and proofread full genetics publication draft.",
+  "deadline": "2025-11-21",
+  "constraints": ["Prefer morning focus blocks 09:00–12:00", "Avoid teaching Tue/Thu 13:00–15:00"]
+}
+Decomposer Response: Research review, outline, draft intro, draft methods, draft results, format citations, proofread.
+Chiku: “Here’s a proposed writing plan:
+- Mon 9–10 → Research review
+- Wed 9–10 → Methods section
+- Fri 9–10 → Results section
+- Mon next week 9–10 → Formatting
+- Wed next week 9–10 → Proofreading
+Does that look right?”
+User: “Yes, perfect.”
+Chiku: [MCP_CALL → create_event] “All scheduled. You’ll be ready for submission next Friday!”
+________________________________________
+Script 2: Simple Event — No Decomposer
+User: “Add department coffee chat at 3:30 PM Thursday.”
+Chiku: “Sure thing — right after your faculty meeting. I’ll add it 3:30–4:00 PM.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Department coffee chat",
+  "start": "2025-11-13T15:30:00-07:00",
+  "end": "2025-11-13T16:00:00-07:00"
+}
+Chiku: “Done! You’ll have just enough time to grab a seat before it starts.”
+________________________________________
+Script 3: Event Conflict — Requires Rescheduling
+User: “Schedule my advisor meeting for Thursday at 4 PM.”
+Chiku (checks calendar): [MCP_CALL → list_events] > Finds conflict with Faculty Meeting (4:00–5:00 PM)
+Chiku: “You’ve got a faculty meeting at that time. Would 11 AM before teaching or 5:15 PM after work be better?”
+User: “Let’s go with 11 AM.”
+Chiku: “Got it — scheduling your advisor meeting Thursday 11–11:45 AM.”
+Chiku → [MCP_CALL → create_event]
+{
+  "title": "Advisor meeting",
+  "start": "2025-11-13T11:00:00-07:00",
+  "end": "2025-11-13T11:45:00-07:00"
+}
+Chiku: “All set! You’ll have time to prep before class and stay on top of your projects.”
