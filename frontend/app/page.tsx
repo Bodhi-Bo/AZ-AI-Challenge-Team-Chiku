@@ -23,13 +23,13 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-gray-900">
+    <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
       {/* Header */}
       <Header />
 
-      {/* Main content */}
-      <main className="flex-1 flex overflow-hidden mt-16">
-        {/* Chat Side (Left) - Scrollable */}
+      {/* Main content - Two independent scrollable panels */}
+      <main className="flex-1 flex pt-16 min-h-0">
+        {/* Chat Side (Left) - Independent scrolling */}
         <AnimatePresence mode="wait">
           {(!isMobile || mobileView === "chat") && (
             <motion.div
@@ -38,13 +38,13 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
-              className="w-full md:w-2/5 border-r border-gray-100 dark:border-gray-800 flex flex-col overflow-hidden"
+              className="w-full md:w-2/5 h-full border-r border-gray-100 dark:border-gray-800"
             >
               <ChatInterface />
             </motion.div>
           )}
 
-          {/* Calendar Side (Right) - Scrollable */}
+          {/* Calendar Side (Right) - Independent scrolling */}
           {(!isMobile || mobileView === "calendar") && (
             <motion.div
               key="calendar"
@@ -54,7 +54,7 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className={`${
                 isMobile ? "w-full" : "hidden md:flex md:w-3/5"
-              } flex-col overflow-hidden`}
+              } h-full`}
             >
               <CalendarView />
             </motion.div>
