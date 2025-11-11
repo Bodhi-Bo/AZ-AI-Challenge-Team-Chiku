@@ -1,70 +1,22 @@
+"""
+Calendar service using Beanie ODM for MongoDB operations.
+Provides semantic calendar and reminder management.
+"""
+
 from datetime import datetime, timedelta
-from typing import List, Optional
-from pydantic import BaseModel, Field
-from pymongo import MongoClient
-from bson import ObjectId
-import os
+from typing import Any, Dict, List, Optional
+from beanie import PydanticObjectId
 
-
-class CalendarEvent(BaseModel):
-    """Represents a calendar event with MongoDB support."""
-
-    id: Optional[str] = Field(None, alias="_id")
-    user_id: str
-    title: str
-    date: str  # YYYY-MM-DD
-    start_time: str  # HH:MM
-    duration: int  # minutes
-    description: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-    class Config:
-        populate_by_name = True
-        json_encoders = {ObjectId: str}
-
-
-class Reminder(BaseModel):
-    """Represents a reminder with MongoDB support."""
-
-    id: Optional[str] = Field(None, alias="_id")
-    user_id: str
-    title: str
-    reminder_datetime: str  # ISO format datetime string
-    event_id: Optional[str] = None  # Link to event if this is event-based
-    minutes_before_event: Optional[int] = None  # For event-based reminders
-    priority: str = "normal"  # low, normal, high
-    status: str = "pending"  # pending, completed, snoozed
-    recurrence: Optional[str] = None  # once, daily, weekly, monthly
-    notes: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
-
-    class Config:
-        populate_by_name = True
-        json_encoders = {ObjectId: str}
+from app.models.db.calendar_event import CalendarEvent
+from app.models.db.reminder import Reminder
 
 
 class MongoCalendarService:
-    """MongoDB-backed calendar service with semantic operations."""
+    """MongoDB-backed calendar service using Beanie ODM."""
 
-    def __init__(self, connection_string: Optional[str] = None):
-        """Initialize MongoDB connection."""
-        if connection_string is None:
-            connection_string = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
+    # ================== EVENT METHODS ==================
 
-        self.client = MongoClient(connection_string)
-        self.db = self.client.calendar_assistant
-        self.events = self.db.events
-        self.reminders = self.db.reminders
-
-        # Create indexes for efficient queries
-        self.events.create_index([("user_id", 1), ("date", 1)])
-        self.events.create_index([("user_id", 1), ("date", 1), ("start_time", 1)])
-        self.reminders.create_index([("user_id", 1), ("reminder_datetime", 1)])
-        self.reminders.create_index([("user_id", 1), ("status", 1)])
-
-    def create_event(
+    async def create_event(
         self,
         user_id: str,
         title: str,
@@ -74,56 +26,60 @@ class MongoCalendarService:
         description: Optional[str] = None,
     ) -> CalendarEvent:
         """Create a new calendar event."""
-        event_dict = {
-            "user_id": user_id,
-            "title": title,
-            "date": date,
-            "start_time": start_time,
-            "duration": duration,
-            "description": description,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-        }
+        # Parse date and time strings into a datetime object
+        event_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
 
-        result = self.events.insert_one(event_dict)
-        event_dict["_id"] = str(result.inserted_id)
+        event = CalendarEvent(
+            user_id=user_id,
+            title=title,
+            event_datetime=event_datetime,
+            duration=duration,
+            description=description,
+        )
+        await event.insert()
+        return event
 
-        return CalendarEvent(**event_dict)
-
-    def get_user_events(self, user_id: str) -> List[CalendarEvent]:
+    async def get_user_events(self, user_id: str) -> List[CalendarEvent]:
         """Get all events for a user."""
-        events = self.events.find({"user_id": user_id})
-        return [
-            CalendarEvent(**{**event, "_id": str(event["_id"])}) for event in events
-        ]
+        events = await CalendarEvent.find(CalendarEvent.user_id == user_id).to_list()
+        return events
 
-    def get_events_by_date_range(
+    async def get_events_by_date_range(
         self, user_id: str, start_date: str, end_date: Optional[str] = None
     ) -> List[CalendarEvent]:
         """Get events for a user within a date range."""
         if not end_date:
             end_date = start_date
 
-        query = {"user_id": user_id, "date": {"$gte": start_date, "$lte": end_date}}
+        # Parse dates to datetime objects (start of day and end of day)
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59
+        )
 
-        events = self.events.find(query).sort([("date", 1), ("start_time", 1)])
-        return [
-            CalendarEvent(**{**event, "_id": str(event["_id"])}) for event in events
-        ]
+        events = (
+            await CalendarEvent.find(
+                CalendarEvent.user_id == user_id,
+                CalendarEvent.event_datetime >= start_dt,
+                CalendarEvent.event_datetime <= end_dt,
+            )
+            .sort("event_datetime")
+            .to_list()
+        )
 
-    def get_event(self, user_id: str, event_id: str) -> Optional[CalendarEvent]:
+        return events
+
+    async def get_event(self, user_id: str, event_id: str) -> Optional[CalendarEvent]:
         """Get a specific event."""
         try:
-            event = self.events.find_one(
-                {"_id": ObjectId(event_id), "user_id": user_id}
-            )
-            if event:
-                return CalendarEvent(**{**event, "_id": str(event["_id"])})
+            event = await CalendarEvent.get(PydanticObjectId(event_id))
+            if event and event.user_id == user_id:
+                return event
             return None
-        except:
+        except Exception:
             return None
 
-    def update_event(
+    async def update_event(
         self,
         user_id: str,
         event_id: str,
@@ -135,46 +91,49 @@ class MongoCalendarService:
     ) -> Optional[CalendarEvent]:
         """Update an existing event."""
         try:
-            update_fields: dict = {"updated_at": datetime.now()}
+            event = await CalendarEvent.get(PydanticObjectId(event_id))
+            if not event or event.user_id != user_id:
+                return None
+
+            update_data: Dict[str, Any] = {"updated_at": datetime.utcnow()}
+
+            # If date or start_time is being updated, we need to update event_datetime
+            if date is not None or start_time is not None:
+                # Use existing values if not updating
+                current_date = date if date else event.date
+                current_time = start_time if start_time else event.start_time
+                update_data["event_datetime"] = datetime.strptime(
+                    f"{current_date} {current_time}", "%Y-%m-%d %H:%M"
+                )
 
             if title is not None:
-                update_fields["title"] = title
-            if date is not None:
-                update_fields["date"] = date
-            if start_time is not None:
-                update_fields["start_time"] = start_time
+                update_data["title"] = title
             if duration is not None:
-                update_fields["duration"] = duration
+                update_data["duration"] = duration
             if description is not None:
-                update_fields["description"] = description
+                update_data["description"] = description
 
-            result = self.events.find_one_and_update(
-                {"_id": ObjectId(event_id), "user_id": user_id},
-                {"$set": update_fields},
-                return_document=True,
-            )
-
-            if result:
-                return CalendarEvent(**{**result, "_id": str(result["_id"])})
-            return None
-        except:
+            await event.set(update_data)
+            return event
+        except Exception:
             return None
 
-    def delete_event(self, user_id: str, event_id: str) -> bool:
+    async def delete_event(self, user_id: str, event_id: str) -> bool:
         """Delete an event."""
         try:
-            result = self.events.delete_one(
-                {"_id": ObjectId(event_id), "user_id": user_id}
-            )
-            return result.deleted_count > 0
-        except:
+            event = await CalendarEvent.get(PydanticObjectId(event_id))
+            if event and event.user_id == user_id:
+                await event.delete()
+                return True
+            return False
+        except Exception:
             return False
 
-    def get_events_on_date(self, user_id: str, date: str) -> List[CalendarEvent]:
+    async def get_events_on_date(self, user_id: str, date: str) -> List[CalendarEvent]:
         """Get all events for a specific date."""
-        return self.get_events_by_date_range(user_id, date, date)
+        return await self.get_events_by_date_range(user_id, date, date)
 
-    def find_available_slots(
+    async def find_available_slots(
         self,
         user_id: str,
         date: str,
@@ -185,7 +144,7 @@ class MongoCalendarService:
         Find available time slots on a given date.
         Returns list of available slots as {start_time: str, end_time: str}.
         """
-        events = self.get_events_on_date(user_id, date)
+        events = await self.get_events_on_date(user_id, date)
 
         # Create list of busy periods
         busy_periods = []
@@ -229,11 +188,11 @@ class MongoCalendarService:
 
         return available_slots
 
-    def is_time_available(
+    async def is_time_available(
         self, user_id: str, date: str, start_time: str, duration: int
     ) -> bool:
         """Check if a specific time slot is available."""
-        events = self.get_events_on_date(user_id, date)
+        events = await self.get_events_on_date(user_id, date)
 
         # Parse proposed time
         proposed_hour, proposed_min = map(int, start_time.split(":"))
@@ -254,7 +213,7 @@ class MongoCalendarService:
 
     # ================== REMINDER METHODS ==================
 
-    def create_reminder(
+    async def create_reminder(
         self,
         user_id: str,
         title: str,
@@ -265,26 +224,22 @@ class MongoCalendarService:
         notes: Optional[str] = None,
     ) -> Reminder:
         """Create a new reminder."""
-        reminder_dict = {
-            "user_id": user_id,
-            "title": title,
-            "reminder_datetime": reminder_datetime,
-            "event_id": event_id,
-            "minutes_before_event": None,
-            "priority": priority,
-            "status": "pending",
-            "recurrence": recurrence,
-            "notes": notes,
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-        }
+        # Parse string to datetime object
+        reminder_dt = datetime.fromisoformat(reminder_datetime)
 
-        result = self.reminders.insert_one(reminder_dict)
-        reminder_dict["_id"] = str(result.inserted_id)
+        reminder = Reminder(
+            user_id=user_id,
+            title=title,
+            reminder_datetime=reminder_dt,
+            event_id=event_id,
+            priority=priority,
+            recurrence=recurrence,
+            notes=notes,
+        )
+        await reminder.insert()
+        return reminder
 
-        return Reminder(**reminder_dict)
-
-    def create_reminder_for_event(
+    async def create_reminder_for_event(
         self,
         user_id: str,
         event_id: str,
@@ -294,120 +249,106 @@ class MongoCalendarService:
     ) -> Optional[Reminder]:
         """Create a reminder X minutes before an event."""
         # Get the event
-        event = self.get_event(user_id, event_id)
+        event = await self.get_event(user_id, event_id)
         if not event:
             return None
 
-        # Calculate reminder time
-        event_datetime = datetime.strptime(
-            f"{event.date} {event.start_time}", "%Y-%m-%d %H:%M"
-        )
-        reminder_datetime = event_datetime - timedelta(minutes=minutes_before)
+        # Calculate reminder time using the event_datetime
+        reminder_datetime = event.event_datetime - timedelta(minutes=minutes_before)
 
         # Use event title if no custom title provided
         if not title:
             title = f"Reminder: {event.title}"
 
-        reminder_dict = {
-            "user_id": user_id,
-            "title": title,
-            "reminder_datetime": reminder_datetime.isoformat(),
-            "event_id": event_id,
-            "minutes_before_event": minutes_before,
-            "priority": priority,
-            "status": "pending",
-            "recurrence": None,
-            "notes": f"Reminder for event: {event.title}",
-            "created_at": datetime.now(),
-            "updated_at": datetime.now(),
-        }
+        reminder = Reminder(
+            user_id=user_id,
+            title=title,
+            reminder_datetime=reminder_datetime,
+            event_id=event_id,
+            minutes_before_event=minutes_before,
+            priority=priority,
+            notes=f"Reminder for event: {event.title}",
+        )
+        await reminder.insert()
+        return reminder
 
-        result = self.reminders.insert_one(reminder_dict)
-        reminder_dict["_id"] = str(result.inserted_id)
-
-        return Reminder(**reminder_dict)
-
-    def get_upcoming_reminders(
+    async def get_upcoming_reminders(
         self, user_id: str, hours_ahead: int = 24
     ) -> List[Reminder]:
         """Get upcoming reminders within the next X hours."""
-        now = datetime.now()
+        now = datetime.utcnow()
         future = now + timedelta(hours=hours_ahead)
 
-        query = {
-            "user_id": user_id,
-            "status": "pending",
-            "reminder_datetime": {"$gte": now.isoformat(), "$lte": future.isoformat()},
-        }
+        reminders = (
+            await Reminder.find(
+                Reminder.user_id == user_id,
+                Reminder.status == "pending",
+                Reminder.reminder_datetime >= now,
+                Reminder.reminder_datetime <= future,
+            )
+            .sort("reminder_datetime")
+            .to_list()
+        )
 
-        reminders = self.reminders.find(query).sort("reminder_datetime", 1)
-        return [
-            Reminder(**{**reminder, "_id": str(reminder["_id"])})
-            for reminder in reminders
-        ]
+        return reminders
 
-    def get_pending_reminders(self, user_id: str) -> List[Reminder]:
+    async def get_pending_reminders(self, user_id: str) -> List[Reminder]:
         """Get all pending reminders for a user."""
-        query = {"user_id": user_id, "status": "pending"}
+        reminders = (
+            await Reminder.find(
+                Reminder.user_id == user_id,
+                Reminder.status == "pending",
+            )
+            .sort("reminder_datetime")
+            .to_list()
+        )
 
-        reminders = self.reminders.find(query).sort("reminder_datetime", 1)
-        return [
-            Reminder(**{**reminder, "_id": str(reminder["_id"])})
-            for reminder in reminders
-        ]
+        return reminders
 
-    def mark_reminder_completed(self, user_id: str, reminder_id: str) -> bool:
+    async def mark_reminder_completed(self, user_id: str, reminder_id: str) -> bool:
         """Mark a reminder as completed."""
         try:
-            result = self.reminders.find_one_and_update(
-                {"_id": ObjectId(reminder_id), "user_id": user_id},
-                {"$set": {"status": "completed", "updated_at": datetime.now()}},
-                return_document=True,
-            )
-            return result is not None
-        except:
+            reminder = await Reminder.get(PydanticObjectId(reminder_id))
+            if reminder and reminder.user_id == user_id:
+                await reminder.set(
+                    {"status": "completed", "updated_at": datetime.utcnow()}
+                )
+                return True
+            return False
+        except Exception:
             return False
 
-    def snooze_reminder(
+    async def snooze_reminder(
         self, user_id: str, reminder_id: str, snooze_minutes: int
     ) -> Optional[Reminder]:
         """Snooze a reminder by X minutes."""
         try:
-            reminder = self.reminders.find_one(
-                {"_id": ObjectId(reminder_id), "user_id": user_id}
-            )
-            if not reminder:
+            reminder = await Reminder.get(PydanticObjectId(reminder_id))
+            if not reminder or reminder.user_id != user_id:
                 return None
 
-            current_time = datetime.fromisoformat(reminder["reminder_datetime"])
-            new_time = current_time + timedelta(minutes=snooze_minutes)
+            new_time = reminder.reminder_datetime + timedelta(minutes=snooze_minutes)
 
-            result = self.reminders.find_one_and_update(
-                {"_id": ObjectId(reminder_id), "user_id": user_id},
+            await reminder.set(
                 {
-                    "$set": {
-                        "reminder_datetime": new_time.isoformat(),
-                        "status": "snoozed",
-                        "updated_at": datetime.now(),
-                    }
-                },
-                return_document=True,
+                    "reminder_datetime": new_time,
+                    "status": "snoozed",
+                    "updated_at": datetime.utcnow(),
+                }
             )
-
-            if result:
-                return Reminder(**{**result, "_id": str(result["_id"])})
-            return None
-        except:
+            return reminder
+        except Exception:
             return None
 
-    def delete_reminder(self, user_id: str, reminder_id: str) -> bool:
+    async def delete_reminder(self, user_id: str, reminder_id: str) -> bool:
         """Delete a reminder."""
         try:
-            result = self.reminders.delete_one(
-                {"_id": ObjectId(reminder_id), "user_id": user_id}
-            )
-            return result.deleted_count > 0
-        except:
+            reminder = await Reminder.get(PydanticObjectId(reminder_id))
+            if reminder and reminder.user_id == user_id:
+                await reminder.delete()
+                return True
+            return False
+        except Exception:
             return False
 
 

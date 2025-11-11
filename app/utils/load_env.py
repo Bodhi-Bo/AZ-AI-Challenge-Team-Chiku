@@ -12,7 +12,7 @@ _loaded = False
 _lock = threading.Lock()
 
 
-def load_open_ai_app_env(
+def load_env_vars(
     *, required: bool = True, override: bool = False, env_path: Path | None = None
 ) -> None:
     """
@@ -26,7 +26,7 @@ def load_open_ai_app_env(
         if _loaded:
             logger.info("Shared environment variables already loaded; skipping.")
             return
-
+        print(f"Loading environment variables from: {DOT_ENV_PATH}")
         path = env_path or DOT_ENV_PATH
         if not path.exists():
             msg = f".env file not found at: {path}"

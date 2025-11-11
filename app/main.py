@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import Dict
 import json
 import logging
-from app.agent.autonomous_agent import create_autonomous_agent, AutonomousCalendarAgent
+from app.utils.load_env import load_env_vars
+from app.utils.mongo_client import init_db
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -11,10 +13,29 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
-app = FastAPI(title="Calendar Assistant", version="0.1.0")
+app = FastAPI(title="Calendar Assistant (Chiku - ReAct)", version="0.2.0")
 
 # Store agent instances per user
-user_agents: Dict[str, AutonomousCalendarAgent] = {}
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on application startup."""
+    logger.info("🚀 Starting Calendar Assistant application...")
+    try:
+        load_env_vars()
+        await init_db()
+        logger.info("✅ Database initialization complete!")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize database: {e}", exc_info=True)
+        logger.warning(
+            "⚠️  Continuing startup, but some features may not work correctly."
+        )
+
+
+from app.agent.react_agent import create_react_agent, ReactCalendarAgent
+
+user_agents: Dict[str, ReactCalendarAgent] = {}
 
 
 class ChatMessage(BaseModel):
@@ -32,19 +53,19 @@ def health():
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(msg: ChatMessage):
+async def chat(msg: ChatMessage):
     """
     Legacy REST endpoint for chat (kept for compatibility).
     WebSocket endpoint is recommended for better real-time interaction.
     """
     # Get or create agent for this user
     if msg.user_id not in user_agents:
-        user_agents[msg.user_id] = create_autonomous_agent(msg.user_id)
+        user_agents[msg.user_id] = create_react_agent(msg.user_id)
 
     agent = user_agents[msg.user_id]
 
     # Process message
-    response_text = agent.chat(msg.text)
+    response_text = await agent.chat(msg.text)
 
     return ChatResponse(reply=response_text)
 
@@ -52,7 +73,7 @@ def chat(msg: ChatMessage):
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """
-    WebSocket endpoint for real-time chat with the calendar assistant.
+    WebSocket endpoint for real-time chat with Chiku, the calendar assistant.
 
     Message format (from client):
     {"type": "message", "text": "user message here"}
@@ -65,7 +86,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     # Get or create agent for this user
     if user_id not in user_agents:
-        user_agents[user_id] = create_autonomous_agent(user_id)
+        user_agents[user_id] = create_react_agent(user_id)
 
     agent = user_agents[user_id]
 
@@ -74,7 +95,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         await websocket.send_json(
             {
                 "type": "response",
-                "text": "👋 Hi! I'm your calendar assistant. I can help you create, view, update, or delete calendar events. What can I do for you today?",
+                "text": "👋 Hi! I'm Chiku, your compassionate calendar assistant. I'm here to help you manage your schedule in a way that works for you. What would you like to do today?",
             }
         )
 
@@ -90,8 +111,8 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 logger.info(f"📨 Received message from user {user_id}: {user_message}")
                 logger.info("*" * 80)
 
-                # Process with autonomous agent
-                response_text = agent.chat(user_message)
+                # Process with ReAct agent
+                response_text = await agent.chat(user_message)
 
                 # Send response back to client
                 logger.info(f"📤 Sending response to user: {response_text}")
