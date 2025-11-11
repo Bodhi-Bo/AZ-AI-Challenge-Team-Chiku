@@ -1,0 +1,10 @@
+fastapi[standard]
+pydantic
+python-dotenv
+websockets
+langchain
+langgraph
+langchain-openai
+python-dateutil
+pymongo
+redis
