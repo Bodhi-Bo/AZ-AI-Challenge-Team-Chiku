@@ -5,21 +5,15 @@ they are one the same server as the parent wrapper redis app.
 """
 
 import asyncio
-import os
 import logging
 import random
 
 from ..models.keyslot import KeySlot
 from ..utils.redis_key_manager_util import get_all_openai_keys
+from ..config import LOCK_EXPIRY
 
 
 logger = logging.getLogger(__name__)
-
-LOCK_EXPIRY = os.getenv("LOCK_EXPIRY")
-if not LOCK_EXPIRY:
-    raise ValueError(
-        "LOCK_EXPIRY environment variable is not set. Please set it in your .env file."
-    )
 
 
 class OpenAIKeyPool:

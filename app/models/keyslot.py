@@ -46,8 +46,8 @@ class KeySlot:
         if not keys:
             return 0
         # Fetch all values in parallel
-        vals = [redis.get(k) for k in keys]
-        return sum(int(v) for v in vals if v is not None)
+        vals = [redis.get(k) for k in keys]  # type: ignore
+        return sum(int(v) for v in vals if v is not None and v != "")  # type: ignore
 
     def record_usage(self, tokens_used: int) -> None:
         """
@@ -74,7 +74,7 @@ class KeySlot:
             # deadlocks in case the consumer crashes or fails to release the lock.
             # This is especially important in a distributed system where multiple consumers(/concurrent processes) may be trying to acquire the same lock.
             # If there is only one consumer, the lock should be acquired instantly without sleep.
-            result = redis.set(self.lock_key, lock_token, nx=True, ex=lock_expiry)
+            result = redis.set(self.lock_key, lock_token, nx=True, ex=int(lock_expiry))
             if result:
                 return lock_token
             await asyncio.sleep(0.1)
@@ -85,7 +85,8 @@ class KeySlot:
         """
         Check if the distributed lock for this key slot is currently held.
         """
-        return redis.exists(self.lock_key) > 0
+        result = redis.exists(self.lock_key)
+        return int(result) > 0 if result is not None else False  # type: ignore
 
     def release_lock(self, lock_token: str) -> None:
         """
@@ -107,7 +108,7 @@ class KeySlot:
         Get the cooldown timestamp from Redis, or return 0 if not set.
         """
         cooldown_value = redis.get(self.cooldown_key)
-        return float(cooldown_value) if cooldown_value else 0.0
+        return float(cooldown_value) if cooldown_value else 0.0  # type: ignore
 
     def set_cooldown(self, seconds: float):
         redis.set(self.cooldown_key, time.time() + seconds)

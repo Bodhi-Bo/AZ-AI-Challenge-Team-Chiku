@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 async def get_events(
     user_id: str,
     start_date: str,
-    end_date: Optional[str] = None,
-    partial_state_update: Optional[dict] = None,
+    end_date: Optional[str] = None
 ) -> dict:
     """
     Get calendar events for a user within a date range.
@@ -22,7 +21,6 @@ async def get_events(
         user_id: The user's ID
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format (optional, defaults to start_date)
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: List of events with their details and state update
@@ -44,7 +42,7 @@ async def get_events(
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
-            "description": event.description,
+            "description": event.description
         }
         for event in events
     ]
@@ -52,8 +50,7 @@ async def get_events(
     result = {
         "success": True,
         "count": len(events_list),
-        "events": events_list,
-        "partial_state_update": partial_state_update or {},
+        "events": events_list
     }
 
     logger.info(f"✓ Found {len(events_list)} event(s)")
@@ -62,7 +59,7 @@ async def get_events(
 
 @tool
 async def get_events_on_date(
-    user_id: str, date: str, partial_state_update: Optional[dict] = None
+    user_id: str, date: str
 ) -> dict:
     """
     Get all events for a specific date.
@@ -70,7 +67,6 @@ async def get_events_on_date(
     Args:
         user_id: The user's ID
         date: Date in YYYY-MM-DD format
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: List of events for that date and state update
@@ -88,7 +84,7 @@ async def get_events_on_date(
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
-            "description": event.description,
+            "description": event.description
         }
         for event in events
     ]
@@ -97,8 +93,7 @@ async def get_events_on_date(
         "success": True,
         "date": date,
         "count": len(events_list),
-        "events": events_list,
-        "partial_state_update": partial_state_update or {},
+        "events": events_list
     }
 
     logger.info(f"✓ Found {len(events_list)} event(s) on {date}")
@@ -111,8 +106,7 @@ async def find_available_slots(
     date: str,
     duration_minutes: int,
     work_start_hour: int = 9,
-    work_end_hour: int = 17,
-    partial_state_update: Optional[dict] = None,
+    work_end_hour: int = 17
 ) -> dict:
     """
     Find available time slots on a given date that can fit an event of specified duration.
@@ -123,7 +117,6 @@ async def find_available_slots(
         duration_minutes: Required duration in minutes
         work_start_hour: Start of work day (default 9am)
         work_end_hour: End of work day (default 5pm)
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: List of available time slots and state update
@@ -143,8 +136,7 @@ async def find_available_slots(
         "date": date,
         "duration_needed": duration_minutes,
         "available_slots": slots,
-        "count": len(slots),
-        "partial_state_update": partial_state_update or {},
+        "count": len(slots)
     }
 
     logger.info(f"✓ Found {len(slots)} available slot(s)")
@@ -156,8 +148,7 @@ async def check_time_availability(
     user_id: str,
     date: str,
     start_time: str,
-    duration: int,
-    partial_state_update: Optional[dict] = None,
+    duration: int
 ) -> dict:
     """
     Check if a specific time slot is available (no conflicts).
@@ -167,7 +158,6 @@ async def check_time_availability(
         date: Date in YYYY-MM-DD format
         start_time: Start time in HH:MM format
         duration: Duration in minutes
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Whether the time is available and state update
@@ -187,8 +177,7 @@ async def check_time_availability(
         "date": date,
         "start_time": start_time,
         "duration": duration,
-        "is_available": is_available,
-        "partial_state_update": partial_state_update or {},
+        "is_available": is_available
     }
 
     logger.info(f"✓ Time slot is {'available' if is_available else 'NOT available'}")
@@ -202,8 +191,7 @@ async def create_calendar_event(
     date: str,
     start_time: str,
     duration: int,
-    description: Optional[str] = None,
-    partial_state_update: Optional[dict] = None,
+    description: Optional[str] = None
 ) -> dict:
     """
     Create a new calendar event.
@@ -215,7 +203,6 @@ async def create_calendar_event(
         start_time: Event start time in HH:MM format
         duration: Event duration in minutes
         description: Optional event description
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Created event details and state update
@@ -232,7 +219,7 @@ async def create_calendar_event(
         date=date,
         start_time=start_time,
         duration=duration,
-        description=description,
+        description=description
     )
 
     result = {
@@ -242,8 +229,7 @@ async def create_calendar_event(
         "date": event.date,
         "start_time": event.start_time,
         "duration": event.duration,
-        "description": event.description,
-        "partial_state_update": partial_state_update or {},
+        "description": event.description
     }
 
     logger.info(f"✓ Event created: {event.title} on {event.date} at {event.start_time}")
@@ -258,21 +244,28 @@ async def update_calendar_event(
     date: Optional[str] = None,
     start_time: Optional[str] = None,
     duration: Optional[int] = None,
-    description: Optional[str] = None,
-    partial_state_update: Optional[dict] = None,
+    description: Optional[str] = None
 ) -> dict:
     """
     Update an existing calendar event. Only provided fields will be updated.
 
+    **IMPORTANT**: The event_id parameter must be an ObjectId string obtained from a previous
+    query (e.g., get_todays_schedule, get_events_on_date, or find_event_by_title).
+    DO NOT use event titles or made-up identifiers as event_id.
+
+    Workflow:
+        1. First call find_event_by_title or get_events_on_date to find the event
+        2. Extract the event_id from the results (e.g., "691317c99da9a2b1525f35c9")
+        3. Then call this function with that event_id
+
     Args:
         user_id: The user's ID
-        event_id: The event ID to update
+        event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         title: New event title (optional)
         date: New event date in YYYY-MM-DD format (optional)
         start_time: New event start time in HH:MM format (optional)
         duration: New event duration in minutes (optional)
         description: New event description (optional)
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Updated event details or error and state update
@@ -291,15 +284,14 @@ async def update_calendar_event(
         date=date,
         start_time=start_time,
         duration=duration,
-        description=description,
+        description=description
     )
 
     if not event:
         logger.warning(f"✗ Event not found: {event_id}")
         return {
             "success": False,
-            "error": f"Event {event_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Event {event_id} not found"
         }
 
     result = {
@@ -309,8 +301,7 @@ async def update_calendar_event(
         "date": event.date,
         "start_time": event.start_time,
         "duration": event.duration,
-        "description": event.description,
-        "partial_state_update": partial_state_update or {},
+        "description": event.description
     }
 
     logger.info(f"✓ Event updated: {event.title}")
@@ -322,19 +313,26 @@ async def move_event_to_date(
     user_id: str,
     event_id: str,
     new_date: str,
-    new_start_time: Optional[str] = None,
-    partial_state_update: Optional[dict] = None,
+    new_start_time: Optional[str] = None
 ) -> dict:
     """
     Move an event to a different date, optionally changing the time.
     This is a semantic wrapper around update_calendar_event for moving events.
 
+    **IMPORTANT**: The event_id parameter must be an ObjectId string obtained from a previous
+    query (e.g., get_todays_schedule, get_events_on_date, or find_event_by_title).
+    DO NOT use event titles or made-up identifiers as event_id.
+
+    Workflow:
+        1. First call find_event_by_title or get_events_on_date to find the event
+        2. Extract the event_id from the results (e.g., "691317c99da9a2b1525f35c9")
+        3. Then call this function with that event_id
+
     Args:
         user_id: The user's ID
-        event_id: The event ID to move
+        event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         new_date: New date in YYYY-MM-DD format
         new_start_time: New start time in HH:MM format (optional, keeps original time if not provided)
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Updated event details and state update
@@ -349,15 +347,14 @@ async def move_event_to_date(
         user_id=user_id,
         event_id=event_id,
         date=new_date,
-        start_time=new_start_time if new_start_time else None,
+        start_time=new_start_time if new_start_time else None
     )
 
     if not event:
         logger.warning(f"✗ Event not found: {event_id}")
         return {
             "success": False,
-            "error": f"Event {event_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Event {event_id} not found"
         }
 
     result = {
@@ -367,8 +364,7 @@ async def move_event_to_date(
         "old_date": "moved",
         "new_date": event.date,
         "start_time": event.start_time,
-        "duration": event.duration,
-        "partial_state_update": partial_state_update or {},
+        "duration": event.duration
     }
 
     logger.info(f"✓ Event moved: {event.title} → {event.date} at {event.start_time}")
@@ -377,15 +373,23 @@ async def move_event_to_date(
 
 @tool
 async def delete_calendar_event(
-    user_id: str, event_id: str, partial_state_update: Optional[dict] = None
+    user_id: str, event_id: str
 ) -> dict:
     """
     Delete a calendar event.
 
+    **IMPORTANT**: The event_id parameter must be an ObjectId string obtained from a previous
+    query (e.g., get_todays_schedule, get_events_on_date, or find_event_by_title).
+    DO NOT use event titles or made-up identifiers as event_id.
+
+    Workflow:
+        1. First call find_event_by_title or get_events_on_date to find the event
+        2. Extract the event_id from the results (e.g., "691317c99da9a2b1525f35c9")
+        3. Then call this function with that event_id
+
     Args:
         user_id: The user's ID
-        event_id: The event ID to delete
-        partial_state_update: State insights for this iteration
+        event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
 
     Returns:
         dict: Success status and state update
@@ -400,15 +404,13 @@ async def delete_calendar_event(
         logger.warning(f"✗ Event not found: {event_id}")
         return {
             "success": False,
-            "error": f"Event {event_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Event {event_id} not found"
         }
 
     result = {
         "success": True,
         "event_id": event_id,
-        "message": "Event deleted",
-        "partial_state_update": partial_state_update or {},
+        "message": "Event deleted"
     }
 
     logger.info(f"✓ Event deleted: {event_id}")
@@ -417,14 +419,13 @@ async def delete_calendar_event(
 
 @tool
 async def get_todays_schedule(
-    user_id: str, partial_state_update: Optional[dict] = None
+    user_id: str
 ) -> dict:
     """
     Get today's schedule for the user.
 
     Args:
         user_id: The user's ID
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Today's events and state update
@@ -437,22 +438,20 @@ async def get_todays_schedule(
     return await get_events_on_date.ainvoke(
         {
             "user_id": user_id,
-            "date": today,
-            "partial_state_update": partial_state_update,
+            "date": today
         }
     )
 
 
 @tool
 async def get_tomorrows_schedule(
-    user_id: str, partial_state_update: Optional[dict] = None
+    user_id: str
 ) -> dict:
     """
     Get tomorrow's schedule for the user.
 
     Args:
         user_id: The user's ID
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Tomorrow's events and state update
@@ -465,22 +464,20 @@ async def get_tomorrows_schedule(
     return await get_events_on_date.ainvoke(
         {
             "user_id": user_id,
-            "date": tomorrow,
-            "partial_state_update": partial_state_update,
+            "date": tomorrow
         }
     )
 
 
 @tool
 async def get_week_schedule(
-    user_id: str, partial_state_update: Optional[dict] = None
+    user_id: str
 ) -> dict:
     """
     Get this week's schedule (next 7 days).
 
     Args:
         user_id: The user's ID
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: This week's events and state update
@@ -496,10 +493,88 @@ async def get_week_schedule(
         {
             "user_id": user_id,
             "start_date": start_date,
-            "end_date": end_date,
-            "partial_state_update": partial_state_update,
+            "end_date": end_date
         }
     )
+
+
+@tool
+async def find_event_by_title(
+    user_id: str,
+    title_query: str,
+    date: Optional[str] = None
+) -> dict:
+    """
+    Search for events by title (case-insensitive partial match).
+
+    **IMPORTANT**: Use this tool when you need to find the event_id for updating, moving,
+    or deleting an event that the user refers to by name/title.
+
+    The event_id returned by this tool must be used as input to update_calendar_event,
+    move_event_to_date, or delete_calendar_event.
+
+    Args:
+        user_id: The user's ID
+        title_query: Title or partial title to search for (case-insensitive)
+        date: Optional date to narrow search (YYYY-MM-DD format). If not provided, searches all dates.
+
+    Returns:
+        dict: Matching events with their event_ids, titles, dates, and times
+
+    Example:
+        User says "move my yoga session to tomorrow"
+        1. Call find_event_by_title(user_id="user_123", title_query="yoga")
+        2. Get back event_id "691317c99da9a2b1525f35c9"
+        3. Call move_event_to_date(user_id="user_123", event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
+    """
+    logger.info("=" * 60)
+    logger.info("TOOL: find_event_by_title")
+    logger.info(
+        f"Parameters: user_id={user_id}, title_query='{title_query}', date={date}"
+    )
+
+    # If date is provided, search only that date
+    if date:
+        events = await calendar_service.get_events_on_date(user_id, date)
+    else:
+        # Search across a wide date range (past 30 days to next 365 days)
+        start_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        end_date = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
+        events = await calendar_service.get_events_by_date_range(
+            user_id, start_date, end_date
+        )
+
+    # Filter events by title (case-insensitive partial match)
+    title_lower = title_query.lower()
+    matching_events = [event for event in events if title_lower in event.title.lower()]
+
+    events_list = [
+        {
+            "event_id": str(
+                event.id
+            ),  # Convert ObjectId to string for JSON serialization
+            "title": event.title,
+            "date": event.date,
+            "start_time": event.start_time,
+            "duration": event.duration,
+            "description": event.description
+        }
+        for event in matching_events
+    ]
+
+    result = {
+        "success": True,
+        "query": title_query,
+        "count": len(events_list),
+        "events": events_list
+    }
+
+    if len(events_list) == 0:
+        logger.info(f"✗ No events found matching '{title_query}'")
+    else:
+        logger.info(f"✓ Found {len(events_list)} event(s) matching '{title_query}'")
+
+    return result
 
 
 # ================== REMINDER TOOLS ==================
@@ -512,8 +587,7 @@ async def create_reminder(
     reminder_datetime: str,
     priority: str = "normal",
     recurrence: Optional[str] = None,
-    notes: Optional[str] = None,
-    partial_state_update: Optional[dict] = None,
+    notes: Optional[str] = None
 ) -> dict:
     """
     Create a standalone reminder (not linked to any event).
@@ -525,7 +599,6 @@ async def create_reminder(
         priority: Priority level (low, normal, high) - default normal
         recurrence: Recurrence pattern (once, daily, weekly, monthly) - optional
         notes: Additional notes - optional
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Created reminder details and state update
@@ -542,7 +615,7 @@ async def create_reminder(
         reminder_datetime=reminder_datetime,
         priority=priority,
         recurrence=recurrence,
-        notes=notes,
+        notes=notes
     )
 
     result = {
@@ -551,8 +624,7 @@ async def create_reminder(
         "title": reminder.title,
         "reminder_datetime": reminder.reminder_datetime,
         "priority": reminder.priority,
-        "status": reminder.status,
-        "partial_state_update": partial_state_update or {},
+        "status": reminder.status
     }
 
     logger.info(f"✓ Reminder created: {reminder.title} at {reminder.reminder_datetime}")
@@ -565,19 +637,21 @@ async def create_reminder_for_event(
     event_id: str,
     minutes_before: int,
     title: Optional[str] = None,
-    priority: str = "normal",
-    partial_state_update: Optional[dict] = None,
+    priority: str = "normal"
 ) -> dict:
     """
     Create a reminder X minutes before a calendar event.
 
+    **IMPORTANT**: The event_id parameter must be an ObjectId string obtained from a previous
+    query (e.g., get_todays_schedule, get_events_on_date, or find_event_by_title).
+    DO NOT use event titles or made-up identifiers as event_id.
+
     Args:
         user_id: The user's ID
-        event_id: The event ID to create reminder for
+        event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         minutes_before: How many minutes before event to remind
         title: Custom reminder title (optional, defaults to "Reminder: {event_title}")
         priority: Priority level (low, normal, high) - default normal
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Created reminder details and state update
@@ -591,15 +665,14 @@ async def create_reminder_for_event(
         event_id=event_id,
         minutes_before=minutes_before,
         title=title,
-        priority=priority,
+        priority=priority
     )
 
     if not reminder:
         logger.warning(f"✗ Event not found: {event_id}")
         return {
             "success": False,
-            "error": f"Event {event_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Event {event_id} not found"
         }
 
     result = {
@@ -609,8 +682,7 @@ async def create_reminder_for_event(
         "reminder_datetime": reminder.reminder_datetime,
         "event_id": reminder.event_id,
         "minutes_before_event": reminder.minutes_before_event,
-        "priority": reminder.priority,
-        "partial_state_update": partial_state_update or {},
+        "priority": reminder.priority
     }
 
     logger.info(f"✓ Event reminder created: {minutes_before} min before event")
@@ -619,7 +691,7 @@ async def create_reminder_for_event(
 
 @tool
 async def get_upcoming_reminders(
-    user_id: str, hours_ahead: int = 24, partial_state_update: Optional[dict] = None
+    user_id: str, hours_ahead: int = 24
 ) -> dict:
     """
     Get upcoming reminders within the next X hours.
@@ -627,7 +699,6 @@ async def get_upcoming_reminders(
     Args:
         user_id: The user's ID
         hours_ahead: How many hours ahead to look (default 24)
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: List of upcoming reminders and state update
@@ -645,7 +716,7 @@ async def get_upcoming_reminders(
             "reminder_datetime": reminder.reminder_datetime,
             "event_id": reminder.event_id,
             "priority": reminder.priority,
-            "status": reminder.status,
+            "status": reminder.status
         }
         for reminder in reminders
     ]
@@ -653,8 +724,7 @@ async def get_upcoming_reminders(
     result = {
         "success": True,
         "count": len(reminders_list),
-        "reminders": reminders_list,
-        "partial_state_update": partial_state_update or {},
+        "reminders": reminders_list
     }
 
     logger.info(f"✓ Found {len(reminders_list)} upcoming reminder(s)")
@@ -663,14 +733,13 @@ async def get_upcoming_reminders(
 
 @tool
 async def get_pending_reminders(
-    user_id: str, partial_state_update: Optional[dict] = None
+    user_id: str
 ) -> dict:
     """
     Get all pending reminders for the user.
 
     Args:
         user_id: The user's ID
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: List of pending reminders and state update
@@ -687,7 +756,7 @@ async def get_pending_reminders(
             "title": reminder.title,
             "reminder_datetime": reminder.reminder_datetime,
             "event_id": reminder.event_id,
-            "priority": reminder.priority,
+            "priority": reminder.priority
         }
         for reminder in reminders
     ]
@@ -695,8 +764,7 @@ async def get_pending_reminders(
     result = {
         "success": True,
         "count": len(reminders_list),
-        "reminders": reminders_list,
-        "partial_state_update": partial_state_update or {},
+        "reminders": reminders_list
     }
 
     logger.info(f"✓ Found {len(reminders_list)} pending reminder(s)")
@@ -705,7 +773,7 @@ async def get_pending_reminders(
 
 @tool
 async def mark_reminder_completed(
-    user_id: str, reminder_id: str, partial_state_update: Optional[dict] = None
+    user_id: str, reminder_id: str
 ) -> dict:
     """
     Mark a reminder as completed.
@@ -713,7 +781,6 @@ async def mark_reminder_completed(
     Args:
         user_id: The user's ID
         reminder_id: The reminder ID to complete
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Success status and state update
@@ -728,15 +795,13 @@ async def mark_reminder_completed(
         logger.warning(f"✗ Reminder not found: {reminder_id}")
         return {
             "success": False,
-            "error": f"Reminder {reminder_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Reminder {reminder_id} not found"
         }
 
     result = {
         "success": True,
         "reminder_id": reminder_id,
-        "status": "completed",
-        "partial_state_update": partial_state_update or {},
+        "status": "completed"
     }
 
     logger.info(f"✓ Reminder marked completed: {reminder_id}")
@@ -747,8 +812,7 @@ async def mark_reminder_completed(
 async def snooze_reminder(
     user_id: str,
     reminder_id: str,
-    snooze_minutes: int,
-    partial_state_update: Optional[dict] = None,
+    snooze_minutes: int
 ) -> dict:
     """
     Snooze a reminder by X minutes.
@@ -757,7 +821,6 @@ async def snooze_reminder(
         user_id: The user's ID
         reminder_id: The reminder ID to snooze
         snooze_minutes: How many minutes to snooze
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Updated reminder details and state update
@@ -774,8 +837,7 @@ async def snooze_reminder(
         logger.warning(f"✗ Reminder not found: {reminder_id}")
         return {
             "success": False,
-            "error": f"Reminder {reminder_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Reminder {reminder_id} not found"
         }
 
     result = {
@@ -783,8 +845,7 @@ async def snooze_reminder(
         "reminder_id": reminder.id,
         "title": reminder.title,
         "new_reminder_datetime": reminder.reminder_datetime,
-        "status": reminder.status,
-        "partial_state_update": partial_state_update or {},
+        "status": reminder.status
     }
 
     logger.info(
@@ -795,7 +856,7 @@ async def snooze_reminder(
 
 @tool
 async def delete_reminder(
-    user_id: str, reminder_id: str, partial_state_update: Optional[dict] = None
+    user_id: str, reminder_id: str
 ) -> dict:
     """
     Delete a reminder.
@@ -803,7 +864,6 @@ async def delete_reminder(
     Args:
         user_id: The user's ID
         reminder_id: The reminder ID to delete
-        partial_state_update: State insights for this iteration
 
     Returns:
         dict: Success status and state update
@@ -818,15 +878,13 @@ async def delete_reminder(
         logger.warning(f"✗ Reminder not found: {reminder_id}")
         return {
             "success": False,
-            "error": f"Reminder {reminder_id} not found",
-            "partial_state_update": partial_state_update or {},
+            "error": f"Reminder {reminder_id} not found"
         }
 
     result = {
         "success": True,
         "reminder_id": reminder_id,
-        "message": "Reminder deleted",
-        "partial_state_update": partial_state_update or {},
+        "message": "Reminder deleted"
     }
 
     logger.info(f"✓ Reminder deleted: {reminder_id}")

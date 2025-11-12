@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Dict
 import json
 import logging
-from app.utils.load_env import load_env_vars
+
 from app.utils.mongo_client import init_db
 
 
@@ -23,7 +23,6 @@ async def startup_event():
     """Initialize database on application startup."""
     logger.info("🚀 Starting Calendar Assistant application...")
     try:
-        load_env_vars()
         await init_db()
         logger.info("✅ Database initialization complete!")
     except Exception as e:

@@ -1,20 +1,11 @@
-import os
-from redis import Redis  # this import lets pylance know redis is typed
+from redis import Redis
+from typing import TYPE_CHECKING
 
-HOST = os.getenv("REDIS_HOST")
-PORT = os.getenv("REDIS_PORT")
+from app.config import REDIS_HOST, REDIS_PORT
 
-if not HOST:
-    raise ValueError(
-        "REDIS_HOST environment variable is not set. Please set it in your .env file."
-    )
-if not PORT:
-    raise ValueError(
-        "REDIS_PORT environment variable is not set. Please set it in your .env file."
-    )
+if TYPE_CHECKING:
+    from redis import Redis as RedisType
+else:
+    RedisType = Redis
 
-PORT = int(PORT)  # Ensure PORT is an integer
-
-redis: Redis = Redis(host=HOST, port=PORT, db=0, decode_responses=True)
-# Redis[str] is a type hint indicating that the Redis client will be used with string keys and values.
-# The decode_responses=True argument ensures that the Redis client decodes responses to strings.
+redis: RedisType = Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)

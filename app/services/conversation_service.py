@@ -26,12 +26,23 @@ class Message(BaseModel):
 class ConversationState(BaseModel):
     """Represents the current working state of a conversation."""
 
+    # PERSISTENT across conversations - learnings about the user
+    user_profile: Dict[str, Any] = Field(default_factory=dict)
+
+    # TRANSIENT - reset when new conversation starts
     intent: Optional[Dict[str, Any]] = None
     context: Optional[Dict[str, Any]] = None
     planning: Optional[Dict[str, Any]] = None
     commitments: List[Dict[str, Any]] = Field(default_factory=list)
     confidence: float = 0.0
     reasoning: str = ""
+
+    # Track last iteration's tool calls for prompt population
+    last_tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
+
+    # Allow any additional custom fields the LLM wants to store
+    class Config:
+        extra = "allow"  # Allow arbitrary fields
 
 
 class ConversationService:
@@ -83,6 +94,17 @@ class ConversationService:
             self.conversation_states[user_id] = ConversationState()
         return self.conversation_states[user_id]
 
+    def get_conversation_state_for_prompt(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get conversation state as dict for prompt inclusion.
+        Excludes last_tool_calls to avoid duplication with last_tool_actions_and_result.
+        """
+        state = self.get_conversation_state(user_id)
+        state_dict = state.dict()
+        # Remove last_tool_calls as it's formatted separately
+        state_dict.pop("last_tool_calls", None)
+        return state_dict
+
     def update_conversation_state(
         self, user_id: str, partial_update: Dict[str, Any]
     ) -> ConversationState:
@@ -103,6 +125,19 @@ class ConversationService:
     def reset_conversation_state(self, user_id: str) -> None:
         """Reset the conversation state for a user."""
         self.conversation_states[user_id] = ConversationState()
+
+    def reset_transient_state(self, user_id: str) -> None:
+        """
+        Reset only transient conversation state, preserving user_profile.
+        Called when starting a new conversation after a declarative message.
+        """
+        current_state = self.get_conversation_state(user_id)
+        preserved_profile = current_state.user_profile.copy()
+
+        # Reset to fresh state but keep the profile
+        self.conversation_states[user_id] = ConversationState(
+            user_profile=preserved_profile
+        )
 
     def _deep_merge(
         self, base: Dict[str, Any], update: Dict[str, Any]

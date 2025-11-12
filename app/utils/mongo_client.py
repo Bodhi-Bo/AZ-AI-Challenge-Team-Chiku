@@ -3,33 +3,17 @@ MongoDB client initialization using Beanie ODM.
 Follows best practices for async MongoDB connections.
 """
 
-import os
-from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from pydantic_settings import BaseSettings
 from bson.codec_options import CodecOptions
 from datetime import timezone
 import logging
 
+from app.config import MONGO_DB_URI
 from app.models.db.calendar_event import CalendarEvent
 from app.models.db.reminder import Reminder
 
 logger = logging.getLogger(__name__)
-
-
-class Settings(BaseSettings):
-    MONGO_URI: str = ""
-
-    def __init__(self, **kwargs):
-        # Get MONGO_DB_URI from environment at initialization time
-        mongo_uri = os.getenv("MONGO_DB_URI")
-        if not mongo_uri:
-            raise ValueError("MONGO_DB_URI environment variable is not set.")
-        super().__init__(MONGO_URI=mongo_uri, **kwargs)
-
-
-settings: Optional[Settings] = None  # Will be initialized in init_db()
 
 
 async def init_db(
@@ -54,18 +38,12 @@ async def init_db(
     Returns:
         None
     """
-    global settings
-
-    # Initialize settings if not already done
-    if settings is None:
-        settings = Settings()
-
     # Configure codec options for timezone awareness
     codec_options = CodecOptions(tz_aware=True, tzinfo=timezone.utc)
 
     # Create client with optimized connection pool settings
     client = AsyncIOMotorClient(
-        settings.MONGO_URI,
+        MONGO_DB_URI,
         maxPoolSize=max_pool_size,
         minPoolSize=min_pool_size,
         maxIdleTimeMS=max_idle_time_ms,
@@ -85,7 +63,7 @@ async def init_db(
     database = client.get_default_database().with_options(codec_options=codec_options)
 
     logger.info("🔗 Initializing Beanie connection to MongoDB...")
-    if "example" in settings.MONGO_URI:
+    if "example" in MONGO_DB_URI:
         logger.warning("⚠️  Using local MongoDB credentials.")
 
     logger.info(
@@ -111,12 +89,6 @@ async def get_mongo_database():
     Returns:
         AsyncIOMotorDatabase: MongoDB database instance
     """
-    global settings
-
-    # Initialize settings if not already done
-    if settings is None:
-        settings = Settings()
-
     codec_options = CodecOptions(tz_aware=True, tzinfo=timezone.utc)
-    client = AsyncIOMotorClient(settings.MONGO_URI)
+    client = AsyncIOMotorClient(MONGO_DB_URI)
     return client.get_default_database().with_options(codec_options=codec_options)
