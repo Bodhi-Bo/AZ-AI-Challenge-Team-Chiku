@@ -1,25 +1,25 @@
-"use client"
+"use client";
 
-import { motion } from "framer-motion"
-import { format } from "date-fns"
+import { motion } from "framer-motion";
+import { format } from "date-fns";
 
 interface CurrentTimeIndicatorProps {
-  currentTime: Date
-  isToday: boolean
-  hourHeight: number // Height of each hour slot in pixels
+  currentTime: Date;
+  isToday: boolean;
 }
 
 export default function CurrentTimeIndicator({
   currentTime,
   isToday,
-  hourHeight,
 }: CurrentTimeIndicatorProps) {
-  if (!isToday) return null
+  if (!isToday) return null;
 
   // Calculate position based on current time
-  const hours = currentTime.getHours()
-  const minutes = currentTime.getMinutes()
-  const position = (hours + minutes / 60) * hourHeight
+  // Each hour slot is 80px (as defined in DayView)
+  const hourHeight = 80;
+  const hours = currentTime.getHours();
+  const minutes = currentTime.getMinutes();
+  const position = (hours + minutes / 60) * hourHeight;
 
   return (
     <motion.div
@@ -35,6 +35,5 @@ export default function CurrentTimeIndicator({
         {format(currentTime, "h:mm a")}
       </span>
     </motion.div>
-  )
+  );
 }
-

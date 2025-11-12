@@ -6,7 +6,5 @@ import CalendarView from "./CalendarView";
 export default function CalendarExpanded() {
   const { setCalendarExpanded } = useUIStore();
 
-  return (
-    <CalendarView onClose={() => setCalendarExpanded(false)} />
-  );
+  return <CalendarView onClose={() => setCalendarExpanded(false)} />;
 }
