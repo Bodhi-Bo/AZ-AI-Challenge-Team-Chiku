@@ -30,7 +30,7 @@ export default function Home() {
       {/* Main content - Two independent scrollable panels */}
       <main className="flex-1 flex pt-16 min-h-0">
         {/* Chat Side (Left) - Independent scrolling */}
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="sync">
           {(!isMobile || mobileView === "chat") && (
             <motion.div
               key="chat"

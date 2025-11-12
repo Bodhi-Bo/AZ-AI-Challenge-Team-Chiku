@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     console.log('🎤 Text-to-speech API called');
+
     const { text } = await request.json();
 
     if (!text || text.trim().length === 0) {
@@ -13,26 +14,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('📝 Text to convert:', text.substring(0, 50) + '...');
+    console.log('📝 Text to convert:', text.substring(0, 100) + '...');
 
-    // Check if ElevenLabs is enabled
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
     if (!apiKey || apiKey === 'your_api_key_here') {
-      console.error('❌ ElevenLabs API key not configured properly');
-      console.error('Current key:', apiKey ? 'Set but invalid' : 'Not set');
+      console.error('❌ ElevenLabs API key not configured');
       return NextResponse.json(
-        { error: 'Text-to-speech service not configured. Please add your ElevenLabs API key to .env.local' },
+        { error: 'Text-to-speech service not configured' },
         { status: 500 }
       );
     }
 
     console.log('✅ API key found, calling ElevenLabs...');
 
-    // Choose voice (Sarah - friendly female voice)
+    // ✅ Sarah voice - supports emotions
     const VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
 
-    // Call ElevenLabs API
+    // ✅ CRITICAL: Use this exact model for emotion support
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}`,
       {
@@ -44,11 +43,11 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           text: text,
-          model_id: 'eleven_turbo_v2_5',
+          model_id: 'eleven_v3', // ✅ THIS MODEL SUPPORTS [giggles]
           voice_settings: {
             stability: 0.5,
-            similarity_boost: 0.75,
-            style: 0.5,
+            similarity_boost: 0.8,
+            style: 0.7, // ✅ Higher = stronger emotions
             use_speaker_boost: true
           }
         }),
@@ -59,15 +58,14 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ ElevenLabs API error:', response.status, errorText);
+      console.error('❌ ElevenLabs API error:', errorText);
       throw new Error(`ElevenLabs API failed: ${response.status}`);
     }
 
-    // Get audio data
     const audioBuffer = await response.arrayBuffer();
     console.log('✅ Audio generated, size:', audioBuffer.byteLength, 'bytes');
+    console.log('🎭 Model used: eleven_multilingual_v2 (supports emotions)');
 
-    // Return audio as response
     return new NextResponse(audioBuffer, {
       headers: {
         'Content-Type': 'audio/mpeg',
@@ -78,7 +76,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ Text-to-speech error:', error);
     return NextResponse.json(
-      { error: 'Failed to generate speech. Check server logs for details.' },
+      { error: 'Failed to generate speech' },
       { status: 500 }
     );
   }

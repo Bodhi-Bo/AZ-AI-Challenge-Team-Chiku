@@ -14,20 +14,82 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 
-// Emotion image mapping
+// ✅ SIMPLIFIED - Only 3 emotions
 const emotionImageMap: Record<string, string> = {
-  idle: "Neutral peaceful,.jpg",
-  happy: "Happy.jpg",
-  thinking: "Gentle.jpg",
-  celebrating: "Happy and surprised.jpg",
-  tired: "Slightly uneasy.jpg",
-  encouraging: "Winking.jpg",
-  sleeping: "Gentle.jpg",
+  idle: "Neutral peaceful,.jpg", // Waving hand
+  normal: "Happy.jpg", // Normal conversation (blinking, nodding)
+  thinking: "Gentle.jpg", // Thinking/processing
 };
+
+// ✅ Dummy responses WITHOUT emotion field
+const DUMMY_RESPONSES = [
+  {
+    text: "[giggles] That's a great question! [thoughtfully] Let me think about that for a moment... 🤔",
+  },
+  {
+    text: "[excitedly] Oh wow! That's awesome! I love how you're thinking about this! 🎉 [happily]",
+  },
+  {
+    text: "[confidently] You've got this! I believe in you! 💪 [encouragingly] Let's break it down into smaller steps.",
+  },
+  {
+    text: "[thoughtfully] Hmm, interesting! Here's what I'm thinking... 🤓 [whispers] This could work really well!",
+  },
+  {
+    text: "[excitedly] Yay! You're making such great progress! Keep it up! ✨ [happily]",
+  },
+  {
+    text: "[empathetically] I totally understand how you feel. [softly] Let's work through this together, okay? 🫂",
+  },
+  {
+    text: "[giggles] That's so relatable! [warmly] Here's what helps me with that... 😊",
+  },
+  {
+    text: "[enthusiastically] Great idea! I think you're onto something really good here! 🌟 [excitedly]",
+  },
+  {
+    text: "[excitedly] Let me help you organize that! [confidently] We can definitely make this work! 📝",
+  },
+  {
+    text: "[thoughtfully] Ooh, I see what you mean! Let me suggest something... 💡 [whispers] This is a good approach.",
+  },
+  {
+    text: "[proudly] You're doing amazing! [happily] Seriously, I'm so impressed with your progress! 🎊",
+  },
+  {
+    text: "[empathetically] That sounds challenging. [encouragingly] But I know you can handle it! Let's plan it out. 💪",
+  },
+  {
+    text: "[giggles softly] I love your creativity! [excitedly] Here's what we could try... ✨",
+  },
+  {
+    text: "[excitedly] Perfect timing! I was just thinking about how to help with that! 🎯 [happily]",
+  },
+  {
+    text: "[warmly] You know what? You're really getting the hang of this! [encouragingly] Keep going! 🌈",
+  },
+  {
+    text: "[whispers] Let me tell you a secret... [giggles] Breaking tasks into tiny pieces makes them way less scary! 🤫",
+  },
+  {
+    text: "[sighs contentedly] I love seeing you make progress like this! [happily] You're doing such a great job! 💝",
+  },
+  {
+    text: "[thoughtfully] Hmm... [whispers] here's an idea that might help... [excitedly] Yes! This could work perfectly! 💡",
+  },
+  {
+    text: "[giggles] Oops, looks like we have a little challenge here! [confidently] But that's totally okay, we'll figure it out together! 🌟",
+  },
+  {
+    text: "[enthusiastically] This is so cool! [excitedly] I can't wait to see what you do with this! 🚀",
+  },
+];
+
+let responseIndex = 0;
 
 export default function ChatInterface() {
   const { messages, addMessage, setListening, setSpeaking } = useStore();
-  const { emotion, setEmotion, think } = useMascot();
+  const { emotion, setEmotion } = useMascot();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
@@ -42,29 +104,42 @@ export default function ChatInterface() {
     setSpeaking(isSpeaking);
   }, [isSpeaking, setSpeaking]);
 
-  // Animate mascot mouth while speaking
-  useEffect(() => {
-    if (isSpeaking) {
-      let toggle = true;
-      const mouthInterval = setInterval(() => {
-        setEmotion((prev) => {
-          // Keep special emotions during speaking
-          if (
-            prev === "celebrating" ||
-            prev === "encouraging" ||
-            prev === "thinking"
-          ) {
-            return prev;
-          }
-          // Alternate between happy and idle for mouth movement
-          toggle = !toggle;
-          return toggle ? "happy" : "idle";
-        });
-      }, 300);
+  // Speech to text
+  const {
+    isListening: isListeningState,
+    startListening,
+    stopListening,
+  } = useSpeechToText({
+    onFinalTranscript: async (transcript) => {
+      if (transcript.trim()) {
+        await handleVoiceMessage(transcript);
+      }
+    },
+  });
 
-      return () => clearInterval(mouthInterval);
+  useEffect(() => {
+    setListening(isListeningState);
+  }, [isListeningState, setListening]);
+
+  // ✅ SINGLE EMOTION CONTROL - No rapid switching
+  useEffect(() => {
+    if (isLoading) {
+      // Show thinking during API calls
+      setEmotion("thinking");
+    } else if (isListeningState && !isSpeaking) {
+      // Show thinking when listening (before response)
+      setEmotion("thinking");
+    } else if (isSpeaking) {
+      // Show happy when speaking
+      setEmotion("happy");
+    } else if (messages.length === 0) {
+      // Show idle (waving) only on first load
+      setEmotion("idle");
+    } else {
+      // Default to happy after conversation started
+      setEmotion("happy");
     }
-  }, [isSpeaking, setEmotion]);
+  }, [isLoading, isSpeaking, isListeningState, messages.length, setEmotion]);
 
   // Add dummy conversation on mount
   useEffect(() => {
@@ -95,44 +170,20 @@ export default function ChatInterface() {
       ];
 
       dummyMessages.forEach((msg) => addMessage(msg));
-      setEmotion("encouraging");
-      setTimeout(() => setEmotion("idle"), 2000);
     }
-  }, [addMessage, setEmotion]);
-
-  // Debug emotion changes
-  useEffect(() => {
-    console.log("🎭 Emotion changed to:", emotion);
-  }, [emotion]);
-
-  // Speech to text
-  const {
-    isListening: isListeningState,
-    startListening,
-    stopListening,
-  } = useSpeechToText({
-    onFinalTranscript: async (transcript) => {
-      if (transcript.trim()) {
-        await handleVoiceMessage(transcript);
-      }
-    },
-  });
-
-  useEffect(() => {
-    setListening(isListeningState);
-  }, [isListeningState, setListening]);
+  }, [addMessage]);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // ✅ Simplified voice message handler - NO manual emotion changes
   const handleVoiceMessage = async (text: string) => {
-    // Stop listening immediately
-    stopListening();
+    console.log("🎤 Voice message received:", text);
 
-    // Show thinking emotion
-    think();
+    stopListening();
+    // Emotion automatically becomes "thinking" via main useEffect
 
     const userMessage = {
       id: `msg-${Date.now()}`,
@@ -143,95 +194,64 @@ export default function ChatInterface() {
     };
     addMessage(userMessage);
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // Get dummy response
+    const dummyResponse =
+      DUMMY_RESPONSES[responseIndex % DUMMY_RESPONSES.length];
+    responseIndex++;
+
+    console.log("🤖 Dummy response:", dummyResponse.text);
+
+    const assistantMessage = {
+      id: `msg-${Date.now() + 1}`,
+      role: "assistant" as const,
+      content: dummyResponse.text,
+      timestamp: new Date(),
+    };
+    addMessage(assistantMessage);
+
+    // Speak response - emotion handled by main useEffect
+    await speak(dummyResponse.text);
+
+    // Show toast after speaking
+    if (voiceMode) {
+      toast("Click mic when ready to speak again", {
+        duration: 3000,
+        icon: "🎙️",
       });
-
-      if (!response.ok) throw new Error("Failed");
-
-      const data = await response.json();
-
-      const assistantMessage = {
-        id: `msg-${Date.now() + 1}`,
-        role: "assistant" as const,
-        content: data.reply,
-        timestamp: new Date(),
-      };
-      addMessage(assistantMessage);
-
-      // Detect emotion from response BEFORE speaking
-      const lowerReply = data.reply.toLowerCase();
-      if (
-        lowerReply.includes("great") ||
-        lowerReply.includes("awesome") ||
-        lowerReply.includes("excellent")
-      ) {
-        setEmotion("celebrating");
-      } else if (
-        lowerReply.includes("think") ||
-        lowerReply.includes("consider")
-      ) {
-        setEmotion("thinking");
-      } else if (
-        lowerReply.includes("understand") ||
-        lowerReply.includes("help")
-      ) {
-        setEmotion("encouraging");
-      } else {
-        setEmotion("happy");
-      }
-
-      // Speak response with ElevenLabs
-      await speak(data.reply);
-
-      // Return to idle after speaking
-      setTimeout(() => {
-        setEmotion("idle");
-        if (voiceMode) {
-          toast("Click mic when ready to speak again", {
-            duration: 3000,
-            icon: "🎙️",
-          });
-        }
-      }, 1000);
-    } catch (err) {
-      console.error("Voice message error:", err);
-      toast.error("Failed to process message");
-      setEmotion("tired");
-      setTimeout(() => setEmotion("idle"), 3000);
     }
   };
 
+  // ✅ Simplified voice mode toggle
   const toggleVoiceMode = async () => {
     if (voiceMode) {
       // STOP VOICE MODE
       stopListening();
       stopSpeaking();
       setVoiceMode(false);
-      setEmotion("idle");
       toast.success("Voice mode disabled");
     } else {
       // START VOICE MODE
       setVoiceMode(true);
-      setEmotion("happy");
 
       // Speak greeting message
-      const greeting = "Hi! I'm ready to help. What would you like to work on?";
+      const greeting = "Hi! I'm ready to help! What would you like to work on?";
       await speak(greeting);
 
       // Wait for greeting to finish
       setTimeout(() => {
-        setEmotion("idle");
         toast.success("Click mic to start talking", { duration: 3000 });
       }, 2000);
     }
   };
 
+  // ✅ Simplified text message handler - NO manual emotion changes
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
+
+    console.log("💬 Text message sent:", input);
 
     const userMessage = {
       id: `msg-${Date.now()}`,
@@ -243,55 +263,30 @@ export default function ChatInterface() {
     addMessage(userMessage);
     setInput("");
     setIsLoading(true);
-    think();
+    // Emotion automatically becomes "thinking" via main useEffect
 
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage.content }),
-      });
+    // Simulate API delay
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      if (!response.ok) throw new Error("Failed");
+    // Get dummy response
+    const dummyResponse =
+      DUMMY_RESPONSES[responseIndex % DUMMY_RESPONSES.length];
+    responseIndex++;
 
-      const data = await response.json();
+    console.log("🤖 Dummy response:", dummyResponse.text);
 
-      const assistantMessage = {
-        id: `msg-${Date.now() + 1}`,
-        role: "assistant" as const,
-        content: data.reply,
-        timestamp: new Date(),
-      };
+    const assistantMessage = {
+      id: `msg-${Date.now() + 1}`,
+      role: "assistant" as const,
+      content: dummyResponse.text,
+      timestamp: new Date(),
+    };
 
-      addMessage(assistantMessage);
+    addMessage(assistantMessage);
+    setIsLoading(false);
 
-      // Change emotion based on response
-      const lowerReply = data.reply.toLowerCase();
-      if (lowerReply.includes("great") || lowerReply.includes("awesome")) {
-        setEmotion("celebrating");
-      } else if (
-        lowerReply.includes("understand") ||
-        lowerReply.includes("help")
-      ) {
-        setEmotion("encouraging");
-      } else {
-        setEmotion("happy");
-      }
-
-      // Speak response
-      await speak(data.reply);
-
-      setTimeout(() => {
-        if (!isSpeaking) setEmotion("idle");
-      }, 1000);
-    } catch (err) {
-      console.error("Send message error:", err);
-      toast.error("Failed to send message");
-      setEmotion("tired");
-      setTimeout(() => setEmotion("idle"), 3000);
-    } finally {
-      setIsLoading(false);
-    }
+    // Speak response - emotion handled by main useEffect
+    await speak(dummyResponse.text);
   };
 
   return (
@@ -308,7 +303,7 @@ export default function ChatInterface() {
             {/* Close button */}
             <button
               onClick={toggleVoiceMode}
-              className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm flex items-center justify-center hover:bg-white dark:hover:bg-gray-800 transition-colors shadow-lg"
+              className="absolute top-6 right-6 w-10 h-10 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm flex items-center justify-center hover:bg-white dark:hover:bg-gray-800 transition-colors shadow-lg z-10"
               aria-label="Close voice mode"
             >
               <X className="w-5 h-5" />
@@ -323,10 +318,16 @@ export default function ChatInterface() {
               {/* Listening pulse effect */}
               {isListeningState && !isSpeaking && (
                 <motion.div
-                  className="absolute inset-0 rounded-full bg-indigo-400/30"
+                  className="absolute inset-0 rounded-full bg-indigo-400/30 blur-xl"
+                  style={{
+                    width: "300px",
+                    height: "300px",
+                    left: "-18px",
+                    top: "-18px",
+                  }}
                   animate={{
-                    scale: [1, 1.3, 1],
-                    opacity: [0.5, 0, 0.5],
+                    scale: [1, 1.2, 1],
+                    opacity: [0.4, 0.6, 0.4],
                   }}
                   transition={{
                     duration: 2,
@@ -341,10 +342,16 @@ export default function ChatInterface() {
                   {[0, 1, 2].map((i) => (
                     <motion.div
                       key={i}
-                      className="absolute inset-0 rounded-full border-4 border-green-400"
+                      className="absolute rounded-full border-4 border-green-400/60"
+                      style={{
+                        width: "300px",
+                        height: "300px",
+                        left: "-18px",
+                        top: "-18px",
+                      }}
                       animate={{
-                        scale: [1, 1.5, 2],
-                        opacity: [0.8, 0.4, 0],
+                        scale: [1, 1.4, 1.8],
+                        opacity: [0.6, 0.3, 0],
                       }}
                       transition={{
                         duration: 2,
@@ -356,9 +363,9 @@ export default function ChatInterface() {
                 </div>
               )}
 
-              {/* Mascot */}
+              {/* Mascot Image */}
               <motion.div
-                className="w-64 h-64 rounded-full overflow-hidden bg-white dark:bg-gray-800 shadow-2xl relative z-10"
+                className="w-64 h-64 relative z-10"
                 animate={{
                   y: isListeningState || isSpeaking ? [0, -10, 0] : 0,
                   scale: isSpeaking ? [1, 1.05, 1] : 1,
@@ -373,8 +380,11 @@ export default function ChatInterface() {
                   alt="Chiku"
                   width={256}
                   height={256}
-                  className="object-cover"
+                  className="object-contain drop-shadow-2xl"
                   priority
+                  style={{
+                    filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.15))",
+                  }}
                 />
               </motion.div>
             </motion.div>
@@ -393,8 +403,7 @@ export default function ChatInterface() {
                   </>
                 ) : isListeningState ? (
                   <>
-                    <Mic className="w-6 h-6 animate-pulse" />I &apos;m
-                    listening...
+                    <Mic className="w-6 h-6 animate-pulse" />I m listening...
                   </>
                 ) : (
                   "Click mic to speak"
@@ -421,11 +430,9 @@ export default function ChatInterface() {
 
                 if (isListeningState) {
                   stopListening();
-                  setEmotion("idle");
                   toast("Stopped listening", { icon: "🎙️" });
                 } else {
                   startListening();
-                  setEmotion("happy");
                   toast("Listening... speak now!", { icon: "👂" });
                 }
               }}
