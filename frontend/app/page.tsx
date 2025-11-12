@@ -1,90 +1,63 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useUIStore } from "@/lib/stores/uiStore";
+import ChatWindow from "@/components/chat/ChatWindow";
+import CalendarWidget from "@/components/calendar/CalendarWidget";
+import CalendarExpanded from "@/components/calendar/CalendarExpanded";
+import MascotDisplay from "@/components/mascot/MascotDisplay";
 import { motion, AnimatePresence } from "framer-motion";
-import Header from "@/components/Header";
-import ChatInterface from "@/components/ChatInterface";
-import CalendarView from "@/components/CalendarView";
-import { Calendar, MessageSquare } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
-export default function Home() {
-  const [mobileView, setMobileView] = useState<"chat" | "calendar">("chat");
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+export default function HomePage() {
+  const { isCalendarExpanded } = useUIStore();
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900">
-      {/* Header */}
-      <Header />
+    <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-secondary-50 via-primary-50/20 to-accent-50/10">
+      <div className="flex h-full">
+        {/* Left Space - 15% */}
+        <div className="w-[15%] shrink-0" />
 
-      {/* Main content - Two independent scrollable panels */}
-      <main className="flex-1 flex pt-16 min-h-0">
-        {/* Chat Side (Left) - Independent scrolling */}
-        <AnimatePresence mode="sync">
-          {(!isMobile || mobileView === "chat") && (
-            <motion.div
-              key="chat"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="w-full md:w-2/5 h-full border-r border-gray-100 dark:border-gray-800"
-            >
-              <ChatInterface />
-            </motion.div>
-          )}
-
-          {/* Calendar Side (Right) - Independent scrolling */}
-          {(!isMobile || mobileView === "calendar") && (
-            <motion.div
-              key="calendar"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className={`${
-                isMobile ? "w-full" : "hidden md:flex md:w-3/5"
-              } h-full`}
-            >
-              <CalendarView />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </main>
-
-      {/* Mobile view toggle */}
-      {isMobile && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 flex gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full p-2 shadow-2xl">
-          <Button
-            variant={mobileView === "chat" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setMobileView("chat")}
-            className="rounded-full px-4"
-          >
-            <MessageSquare className="h-4 w-4 mr-2" />
-            Chat
-          </Button>
-          <Button
-            variant={mobileView === "calendar" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setMobileView("calendar")}
-            className="rounded-full px-4"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Calendar
-          </Button>
+        {/* Chat Window - 50% */}
+        <div className="w-[50%] shrink-0 h-full">
+          <ChatWindow />
         </div>
-      )}
+
+        {/* Right Area - 35% (Calendar Widget or Mascot + Animations) */}
+        <div className="flex-1 relative h-full overflow-hidden">
+          <AnimatePresence mode="wait">
+            {isCalendarExpanded ? (
+              <motion.div
+                key="calendar-expanded"
+                initial={{ opacity: 0, scale: 0.9, x: 50 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: 50 }}
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+                className="absolute inset-0"
+              >
+                <CalendarExpanded />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="mascot-area"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+                className="absolute inset-0 flex flex-col items-center justify-center p-8"
+              >
+                {/* Mascot Display */}
+                <div className="flex-1 flex items-center justify-center">
+                  <MascotDisplay />
+                </div>
+
+                {/* Calendar Widget at Bottom */}
+                <div className="w-full">
+                  <CalendarWidget />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }
