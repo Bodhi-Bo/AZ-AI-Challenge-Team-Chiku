@@ -185,10 +185,39 @@ class ReactCalendarAgent:
 
             # Check if LLM called any tools
             if not response.tool_calls:
-                # No tools called - this shouldn't happen in our design, but handle it
+                # No tools called - LLM provided reasoning/response directly
                 content = str(response.content) if response.content else ""
-                logger.warning(f"LLM responded without tool call: {content}")
-                final_response = content
+                logger.info(f"LLM responded without tool call. Raw content: {content}")
+
+                # Try to parse JSON and extract message if it's structured output
+                try:
+                    import json
+
+                    parsed = json.loads(content)
+
+                    # Look for the actual message in various possible locations
+                    if isinstance(parsed, dict):
+                        # Check if there's a next_action_request with tool_args.content
+                        if (
+                            "next_action_request" in parsed
+                            and "tool_args" in parsed["next_action_request"]
+                        ):
+                            final_response = parsed["next_action_request"][
+                                "tool_args"
+                            ].get("content", content)
+                        # Check if there's direct content field
+                        elif "content" in parsed:
+                            final_response = parsed["content"]
+                        else:
+                            final_response = content
+                    else:
+                        final_response = content
+
+                    logger.info(f"Extracted message: {final_response}")
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    # Not JSON or unexpected structure, use as-is
+                    final_response = content
+
                 break
 
             # Execute tool calls

@@ -4,7 +4,7 @@ These tools are special - they signal the end of an agent iteration.
 """
 
 from langchain_core.tools import tool
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @tool
 def send_interrogative_message(
-    content: str, partial_state_update: Dict[str, Any]
+    content: str, partial_state_update: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Ask the user a clarifying question.
@@ -20,7 +20,7 @@ def send_interrogative_message(
 
     Args:
         content: The question to ask the user (should be concise and kind)
-        partial_state_update: Your current state insights
+        partial_state_update: Your current state insights (optional)
 
     Returns:
         dict: Message content and metadata
@@ -41,7 +41,7 @@ def send_interrogative_message(
 
 @tool
 def send_declarative_message(
-    content: str, partial_state_update: Dict[str, Any]
+    content: str, partial_state_update: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Send a supportive message or summary to the user.
@@ -50,7 +50,7 @@ def send_declarative_message(
 
     Args:
         content: The message to send (can be a confirmation, summary, or supportive statement)
-        partial_state_update: Your current state insights
+        partial_state_update: Your current state insights (optional)
 
     Returns:
         dict: Message content and metadata

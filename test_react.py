@@ -33,8 +33,8 @@ async def test_react_agent():
 
     # Test scenarios
     scenarios = [
-        "Hi, I'm feeling a bit overwhelmed today. Can you help me?",
-        "What's on my schedule for today?",
+        # "Hi, I'm feeling a bit overwhelmed today. Can you help me?",
+        # "What's on my schedule for today?",
         "Can you schedule a meeting with my team tomorrow at 2pm for 60 minutes?",
     ]
 
