@@ -10,62 +10,51 @@ export default function CalendarWidget() {
   const { selectedDate, getTasksForDate } = useCalendarStore();
   const { toggleCalendar } = useUIStore();
   const todayTasks = getTasksForDate(selectedDate);
-  const completedTasks = todayTasks.filter(
-    (t: { completed?: boolean }) => t.completed
-  ).length;
 
   return (
     <motion.div
       whileHover={{ scale: 1.02 }}
+      transition={{ duration: 0.2 }}
       onClick={toggleCalendar}
-      className="glass rounded-3xl p-6 cursor-pointer border border-white/20 shadow-xl transition-smooth hover:shadow-2xl"
+      className="gradient-blue-white rounded-2xl p-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-4">
-          {/* Calendar Icon */}
-          <div className="h-12 w-12 rounded-2xl gradient-bg-primary flex items-center justify-center">
+          <div className="h-12 w-12 rounded-xl gradient-blue-medium flex items-center justify-center shadow-sm">
             <Calendar className="h-6 w-6 text-white" />
           </div>
-
-          {/* Date Info */}
           <div>
-            <p className="text-2xl font-bold text-secondary-900">
+            <div className="text-4xl font-bold text-blue-700 mb-1">
               {format(selectedDate, "d")}
-            </p>
-            <p className="text-sm text-secondary-600">
+            </div>
+            <div className="text-sm font-medium text-blue-600">
               {format(selectedDate, "EEEE")}
-            </p>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {format(selectedDate, "MMMM yyyy")}
+            </div>
           </div>
         </div>
-
-        {/* Task Summary */}
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <p className="text-sm font-medium text-secondary-900">
-              {todayTasks.length} tasks
-            </p>
-            <p className="text-xs text-secondary-500">
-              {completedTasks} completed
-            </p>
+        <ChevronRight className="h-5 w-5 text-blue-400 mt-2" />
+      </div>
+      
+      <div className="pt-4 mt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-2xl font-bold text-blue-700">
+              {todayTasks.length}
+            </div>
+            <div className="text-xs text-gray-500">
+              {todayTasks.length === 1 ? "task" : "tasks"} today
+            </div>
           </div>
-
-          <ChevronRight className="h-5 w-5 text-secondary-400" />
+          <div className="h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">
+            <div className="text-blue-600 font-semibold text-sm">
+              {format(selectedDate, "MMM")}
+            </div>
+          </div>
         </div>
       </div>
-
-      {/* Mini Progress Bar */}
-      {todayTasks.length > 0 && (
-        <div className="mt-4 h-2 bg-secondary-200 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{
-              width: `${(completedTasks / todayTasks.length) * 100}%`,
-            }}
-            className="h-full gradient-bg-primary"
-            transition={{ duration: 0.5 }}
-          />
-        </div>
-      )}
     </motion.div>
   );
 }

@@ -1,13 +1,18 @@
 "use client";
 
-import { Send, Mic } from "lucide-react";
-import { KeyboardEvent } from "react";
+import { ArrowUp, Mic } from "lucide-react";
+import { KeyboardEvent, RefObject } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface MessageInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
   disabled?: boolean;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  onVoiceClick?: () => void;
+  isVoiceActive?: boolean;
 }
 
 export default function MessageInput({
@@ -15,51 +20,58 @@ export default function MessageInput({
   onChange,
   onSend,
   disabled,
+  inputRef,
+  onVoiceClick,
+  isVoiceActive,
 }: MessageInputProps) {
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       onSend();
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange(e.target.value);
+  };
+
   return (
-    <div className="relative flex items-end gap-3">
-      {/* Voice Button (for future implementation) */}
-      <button
-        type="button"
+    <div className="flex items-center gap-3 gradient-blue-white rounded-full px-4 py-2 shadow-md">
+      {/* Text Input - takes most space */}
+      <Input
+        ref={inputRef}
+        value={value}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
         disabled={disabled}
-        className="shrink-0 h-12 w-12 rounded-full gradient-bg-accent text-white flex items-center justify-center hover:opacity-90 transition-opacity disabled:opacity-50"
+        placeholder="Message Chiku..."
+        className="flex-1 border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base placeholder:text-gray-400 h-auto py-2"
+      />
+
+      {/* Send Button */}
+      <Button
+        type="button"
+        onClick={onSend}
+        disabled={disabled || !value.trim()}
+        size="icon"
+        className="h-9 w-9 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex-shrink-0"
       >
-        <Mic className="h-5 w-5" />
-      </button>
+        <ArrowUp className="h-4 w-4" />
+      </Button>
 
-      {/* Text Input */}
-      <div className="flex-1 relative">
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          placeholder="Message Chiku..."
-          rows={1}
-          className="w-full resize-none rounded-2xl border border-secondary-200 bg-white px-5 py-3 pr-12 text-base text-secondary-900 placeholder:text-secondary-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          style={{
-            minHeight: "48px",
-            maxHeight: "120px",
-          }}
-        />
-
-        {/* Send Button */}
-        <button
-          type="button"
-          onClick={onSend}
-          disabled={disabled || !value.trim()}
-          className="absolute right-3 bottom-3 h-6 w-6 flex items-center justify-center text-primary-500 hover:text-primary-600 disabled:text-secondary-300 disabled:cursor-not-allowed transition-colors"
-        >
-          <Send className="h-5 w-5" />
-        </button>
-      </div>
+      {/* Voice Button */}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onVoiceClick}
+        disabled={disabled}
+        className={`h-9 w-9 rounded-full hover:bg-blue-50 transition-all flex-shrink-0 ${
+          isVoiceActive ? "bg-blue-100" : ""
+        }`}
+      >
+        <Mic className="h-4 w-4 text-blue-600" />
+      </Button>
     </div>
   );
 }

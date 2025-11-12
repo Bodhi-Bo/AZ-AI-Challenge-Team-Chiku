@@ -1,28 +1,21 @@
 @import "tailwindcss";
 
+@import "tailwindcss";
+
 @theme {
-  --color-primary-50: 238 242 255;
-  --color-primary-100: 224 231 255;
-  --color-primary-200: 199 210 254;
-  --color-primary-300: 165 180 252;
-  --color-primary-400: 129 140 248;
-  --color-primary-500: 99 102 241;
-  --color-primary-600: 79 70 229;
-  --color-primary-700: 67 56 202;
-  --color-primary-800: 55 48 163;
-  --color-primary-900: 49 46 129;
+  /* Blue Theme Colors */
+  --color-blue-50: 240 249 255;
+  --color-blue-100: 224 242 254;
+  --color-blue-200: 186 230 253;
+  --color-blue-300: 125 211 252;
+  --color-blue-400: 56 189 248;
+  --color-blue-500: 14 165 233;
+  --color-blue-600: 2 132 199;
+  --color-blue-700: 3 105 161;
+  --color-blue-800: 7 89 133;
+  --color-blue-900: 12 74 110;
 
-  --color-secondary-50: 248 250 252;
-  --color-secondary-100: 241 245 249;
-  --color-secondary-200: 226 232 240;
-  --color-secondary-300: 203 213 225;
-  --color-secondary-400: 148 163 184;
-  --color-secondary-500: 100 116 139;
-  --color-secondary-600: 71 85 105;
-  --color-secondary-700: 51 65 85;
-  --color-secondary-800: 30 41 59;
-  --color-secondary-900: 15 23 42;
-
+  /* Keep accent pink for contrast */
   --color-accent-400: 244 114 182;
   --color-accent-500: 236 72 153;
   --color-accent-600: 219 39 119;
@@ -80,24 +73,29 @@
 }
 
 @layer utilities {
-  .gradient-text {
-    background: linear-gradient(135deg, rgb(99 102 241) 0%, rgb(139 92 246) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  .shadow-soft {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   }
 
-  .gradient-bg-primary {
-    background: linear-gradient(135deg, rgb(99 102 241) 0%, rgb(139 92 246) 100%);
+  .shadow-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
 
-  .gradient-bg-accent {
-    background: linear-gradient(135deg, rgb(244 114 182) 0%, rgb(236 72 153) 100%);
+  /* Single unified gradient for entire project */
+  .gradient-main {
+    background: linear-gradient(135deg, rgb(255 255 255) 0%, rgb(240 249 255) 50%, rgb(255 255 255) 100%);
   }
 
-  .glass {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+  /* Component gradients */
+  .gradient-blue-white {
+    background: linear-gradient(135deg, rgb(255 255 255) 0%, rgb(224 242 254) 100%);
+  }
+
+  .gradient-blue-medium {
+    background: linear-gradient(135deg, rgb(14 165 233) 0%, rgb(2 132 199) 100%);
+  }
+
+  .gradient-blue-dark {
+    background: linear-gradient(135deg, rgb(2 132 199) 0%, rgb(3 105 161) 100%);
   }
 }

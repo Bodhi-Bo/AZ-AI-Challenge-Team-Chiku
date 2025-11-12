@@ -22,11 +22,13 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
             message.role === "user" ? "justify-end" : "justify-start"
           }`}
         >
-          <div
-            className={`max-w-[80%] rounded-2xl px-5 py-3 ${
+          <motion.div
+            whileHover={{ scale: 1.01 }}
+            transition={{ duration: 0.2 }}
+            className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-md ${
               message.role === "user"
-                ? "gradient-bg-primary text-white"
-                : "bg-white border border-secondary-200 text-secondary-900"
+                ? "gradient-blue-dark text-white"
+                : "gradient-blue-white text-gray-900"
             }`}
           >
             <p className="text-base leading-relaxed whitespace-pre-wrap">
@@ -34,7 +36,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
             </p>
             <p
               className={`text-xs mt-2 ${
-                message.role === "user" ? "text-white/70" : "text-secondary-500"
+                message.role === "user" ? "text-white/70" : "text-gray-500"
               }`}
             >
               {new Date(message.timestamp).toLocaleTimeString([], {
@@ -42,7 +44,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
                 minute: "2-digit",
               })}
             </p>
-          </div>
+          </motion.div>
         </motion.div>
       ))}
 
@@ -53,9 +55,9 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
           animate={{ opacity: 1 }}
           className="flex justify-start"
         >
-          <div className="bg-white border border-secondary-200 rounded-2xl px-5 py-3 flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary-500" />
-            <span className="text-secondary-600">Thinking...</span>
+          <div className="gradient-blue-white rounded-2xl px-6 py-4 flex items-center gap-2 shadow-md">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <span className="text-gray-600">Thinking...</span>
           </div>
         </motion.div>
       )}
