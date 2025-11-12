@@ -71,14 +71,13 @@ export default function ChatSidebar({
             className="
               h-14 w-14 rounded-full
               bg-gradient-to-r from-gray-700 to-gray-800
-              text-white
               flex items-center justify-center
               shadow-lg shadow-gray-500/20
               hover:shadow-xl
               transition-shadow duration-300
             "
           >
-            <ArrowUp className="h-6 w-6" />
+            <ArrowUp color="black" className="h-6 w-6" />
           </motion.button>
         </div>
       </div>
