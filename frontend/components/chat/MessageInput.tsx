@@ -54,7 +54,7 @@ export default function MessageInput({
         onClick={onSend}
         disabled={disabled || !value.trim()}
         size="icon"
-        className="h-9 w-9 rounded-full bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex-shrink-0"
+        className="h-9 w-9 rounded-full bg-blue-600 text-black hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex-shrink-0"
       >
         <ArrowUp className="h-4 w-4" />
       </Button>

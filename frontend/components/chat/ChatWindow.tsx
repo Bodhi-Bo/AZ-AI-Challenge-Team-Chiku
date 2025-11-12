@@ -4,18 +4,24 @@ import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "@/lib/stores/chatStore";
 import { useUIStore } from "@/lib/stores/uiStore";
 import { useCalendarStore } from "@/lib/stores/calendarStore";
-import { sendMessage } from "@/lib/api/openai";
 import { motion } from "framer-motion";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
 import CloudBackground from "@/components/backgrounds/CloudBackground";
+import { useWebSocket } from "@/hooks/useWebSocket";
+import { useChatHistory } from "@/hooks/useChatHistory";
+import { useCalendar } from "@/hooks/useCalendar";
 
 export default function ChatWindow() {
-  const { messages, addMessage, setLoading, isLoading } = useChatStore();
+  const { messages, isLoading } = useChatStore();
   const { setCalendarExpanded } = useUIStore();
-  const { addTask } = useCalendarStore();
   const [input, setInput] = useState("");
+
+  // Initialize WebSocket and data loading
+  const { sendMessage: sendWebSocketMessage } = useWebSocket();
+  useChatHistory(); // Load previous messages
+  useCalendar(); // Load calendar events
   const [isVoiceActive, setIsVoiceActive] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,67 +34,13 @@ export default function ChatWindow() {
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
-    const userMessage = {
-      id: Date.now().toString(),
-      role: "user" as const,
-      content: input.trim(),
-      timestamp: new Date(),
-    };
+    console.log("📤 Sending message:", input.trim());
 
-    addMessage(userMessage);
+    // Send via WebSocket (hook handles everything)
+    sendWebSocketMessage(input.trim());
+
+    // Clear input
     setInput("");
-    setLoading(true);
-
-    try {
-      // Send to backend webhook
-      const response = await sendMessage(input.trim());
-
-      // Handle calendar opening
-      if (response.openCalendar) {
-        setCalendarExpanded(true);
-      }
-
-      // Handle tasks from backend
-      if (response.tasks && Array.isArray(response.tasks)) {
-        response.tasks.forEach((task) => {
-          addTask({
-            id: task.id,
-            title: task.title,
-            startTime: new Date(task.startTime),
-            endTime: new Date(task.endTime),
-            category: task.category as
-              | "study"
-              | "break"
-              | "class"
-              | "deadline"
-              | "other",
-          });
-        });
-      }
-
-      // Add assistant response
-      const assistantMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant" as const,
-        content: response.message || "I'm here to help!",
-        timestamp: new Date(),
-      };
-
-      addMessage(assistantMessage);
-    } catch (error) {
-      console.error("Failed to send message:", error);
-
-      // Add error message
-      const errorMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant" as const,
-        content: "Sorry, I couldn't process that. Please try again.",
-        timestamp: new Date(),
-      };
-      addMessage(errorMessage);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleVoiceClick = () => {

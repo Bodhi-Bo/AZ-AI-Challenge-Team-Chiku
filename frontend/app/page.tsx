@@ -6,9 +6,16 @@ import CalendarSidebar from "@/components/calendar/CalendarSidebar";
 import CalendarExpanded from "@/components/calendar/CalendarExpanded";
 import CloudBackground from "@/components/backgrounds/CloudBackground";
 import { motion, AnimatePresence } from "framer-motion";
+import { useChatHistory } from "@/hooks/useChatHistory";
+import { useCalendar } from "@/hooks/useCalendar";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 export default function HomePage() {
   const { isCalendarExpanded } = useUIStore();
+
+  useWebSocket();
+  useCalendar();
+  useChatHistory();
 
   return (
     <div className="h-screen w-screen overflow-hidden gradient-main relative">

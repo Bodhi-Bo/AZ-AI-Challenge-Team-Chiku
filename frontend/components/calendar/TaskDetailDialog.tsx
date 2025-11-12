@@ -37,14 +37,14 @@ export default function TaskDetailDialog({
   open,
   onOpenChange,
 }: TaskDetailDialogProps) {
-  const { deleteTask } = useCalendarStore();
+  const { deleteEvent } = useCalendarStore();
   const startTime = parseISO(task.startTime);
   const endTime = parseISO(task.endTime);
   const config = categoryConfig[task.category] || categoryConfig.other;
 
   const handleDelete = () => {
     if (confirm("Are you sure you want to delete this task?")) {
-      deleteTask(task.id);
+      deleteEvent(task.id);
       onOpenChange(false);
     }
   };

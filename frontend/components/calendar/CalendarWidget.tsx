@@ -1,5 +1,4 @@
 "use client";
-
 import { useCalendarStore } from "@/lib/stores/calendarStore";
 import { useUIStore } from "@/lib/stores/uiStore";
 import { format } from "date-fns";
@@ -7,9 +6,16 @@ import { Calendar, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function CalendarWidget() {
-  const { selectedDate, getTasksForDate } = useCalendarStore();
+  const { selectedDate, events } = useCalendarStore(); // ✅ Get events from store
   const { toggleCalendar } = useUIStore();
-  const todayTasks = getTasksForDate(selectedDate);
+
+  // ✅ Filter events for selected date
+  const todayEvents = events.filter((event) => {
+    const eventDate = new Date(event.event_datetime);
+    return (
+      format(eventDate, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd")
+    );
+  });
 
   return (
     <motion.div
@@ -37,15 +43,14 @@ export default function CalendarWidget() {
         </div>
         <ChevronRight className="h-5 w-5 text-blue-400 mt-2" />
       </div>
-      
       <div className="pt-4 mt-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-2xl font-bold text-blue-700">
-              {todayTasks.length}
+              {todayEvents.length}
             </div>
             <div className="text-xs text-gray-500">
-              {todayTasks.length === 1 ? "task" : "tasks"} today
+              {todayEvents.length === 1 ? "event" : "events"} today
             </div>
           </div>
           <div className="h-12 w-12 rounded-lg bg-blue-50 flex items-center justify-center">

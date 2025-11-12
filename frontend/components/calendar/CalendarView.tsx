@@ -10,6 +10,7 @@ import CreateTaskDialog from "./CreateTaskDialog";
 
 import type { Task } from "@/lib/stores/calendarStore";
 import TaskListModal from "./TaskListModel";
+import { CalendarEvent } from "@/types";
 
 interface CalendarViewProps {
   onClose?: () => void;
@@ -22,8 +23,9 @@ export default function CalendarView({
   targetDate,
   targetTime,
 }: CalendarViewProps) {
-  const { selectedDate, setSelectedDate, getTasksForDate, addTask } =
+  const { selectedDate, setSelectedDate, getTasksForDate, addEvent } =
     useCalendarStore();
+
   const [currentDate, setCurrentDate] = useState(targetDate || selectedDate);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -35,39 +37,8 @@ export default function CalendarView({
     hour: number;
   } | null>(null);
   const [selectedHourTasks, setSelectedHourTasks] = useState<Task[]>([]);
-  const [testTargetDate, setTestTargetDate] = useState<Date | undefined>(
-    targetDate
-  );
-  const [testTargetTime, setTestTargetTime] = useState<Date | undefined>(
-    targetTime
-  );
 
-  // Navigate to test target date if set
-  useEffect(() => {
-    if (testTargetDate) {
-      const today = new Date();
-      const daysDiff = Math.floor(
-        (testTargetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (daysDiff !== 0) {
-        // Animate to the target date
-        setIsTransitioning(true);
-        setDirection(daysDiff > 0 ? "next" : "prev");
-
-        setTimeout(() => {
-          setCurrentDate(testTargetDate);
-          setSelectedDate(testTargetDate);
-          setIsTransitioning(false);
-        }, 500);
-      } else {
-        setCurrentDate(testTargetDate);
-        setSelectedDate(testTargetDate);
-      }
-    }
-  }, [testTargetDate, setSelectedDate]);
-
-  // Navigate to target date if provided
+  // ✅ Navigate to target date if provided (SINGLE useEffect, not two!)
   useEffect(() => {
     if (targetDate) {
       const today = new Date();
@@ -76,7 +47,6 @@ export default function CalendarView({
       );
 
       if (daysDiff !== 0) {
-        // Animate to the target date
         setIsTransitioning(true);
         setDirection(daysDiff > 0 ? "next" : "prev");
 
@@ -92,17 +62,20 @@ export default function CalendarView({
     }
   }, [targetDate, setSelectedDate]);
 
+  // ✅ Update current time for red line indicator
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000);
+    }, 60000); // Update every minute
     return () => clearInterval(interval);
   }, []);
 
+  // ✅ Sync currentDate with selectedDate
   useEffect(() => {
     setCurrentDate(selectedDate);
   }, [selectedDate]);
 
+  // ✅ Navigation functions
   const goToPreviousDay = () => {
     setDirection("prev");
     setIsTransitioning(true);
@@ -127,7 +100,7 @@ export default function CalendarView({
       (today.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    if (daysDiff === 0) return; // Already on today
+    if (daysDiff === 0) return;
 
     setDirection(daysDiff > 0 ? "next" : "prev");
     setIsTransitioning(true);
@@ -139,6 +112,7 @@ export default function CalendarView({
     }, 400);
   };
 
+  // ✅ Swipe gesture handler
   const handleDayChange = (
     _event: MouseEvent | TouchEvent | PointerEvent,
     info: { offset: { x: number; y: number } }
@@ -151,11 +125,9 @@ export default function CalendarView({
     }
   };
 
+  // ✅ Event handlers
   const handleHourClick = (hour: number) => {
-    setSelectedTime({
-      date: currentDate,
-      hour,
-    });
+    setSelectedTime({ date: currentDate, hour });
     setShowCreateModal(true);
   };
 
@@ -165,13 +137,29 @@ export default function CalendarView({
   };
 
   const handleCreateTask = (taskData: Omit<Task, "id">) => {
-    const newTask: Task = {
-      ...taskData,
-      id: Date.now().toString(),
+    const startTime = new Date(taskData.startTime);
+    const endTime = new Date(taskData.endTime);
+    const duration = Math.round(
+      (endTime.getTime() - startTime.getTime()) / 60000
+    );
+
+    const newEvent: CalendarEvent = {
+      _id: Date.now().toString(),
+      user_id: process.env.NEXT_PUBLIC_USER_ID || "user_123",
+      title: taskData.title,
+      date: format(startTime, "yyyy-MM-dd"),
+      start_time: format(startTime, "HH:mm"),
+      duration: duration,
+      description: taskData.description,
+      event_datetime: startTime.toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
-    addTask(newTask);
+
+    addEvent(newEvent);
   };
 
+  // ✅ Get tasks for days
   const previousDay = subDays(currentDate, 1);
   const nextDay = addDays(currentDate, 1);
   const currentDayTasks = getTasksForDate(currentDate);
@@ -252,7 +240,7 @@ export default function CalendarView({
               onHourClick={() => {}}
               onShowMoreTasks={() => {}}
               isActive={false}
-              targetTime={testTargetTime || targetTime}
+              targetTime={targetTime}
             />
           </div>
           <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-white to-transparent z-20 pointer-events-none" />
@@ -291,7 +279,7 @@ export default function CalendarView({
                   onHourClick={handleHourClick}
                   onShowMoreTasks={handleShowMoreTasks}
                   isActive={true}
-                  targetTime={testTargetTime || targetTime}
+                  targetTime={targetTime}
                 />
               </div>
             </motion.div>
@@ -328,7 +316,7 @@ export default function CalendarView({
               onHourClick={() => {}}
               onShowMoreTasks={() => {}}
               isActive={false}
-              targetTime={testTargetTime || targetTime}
+              targetTime={targetTime}
             />
           </div>
           <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-white to-transparent z-20 pointer-events-none" />
