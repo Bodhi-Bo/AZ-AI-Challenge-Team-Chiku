@@ -9,6 +9,7 @@ from beanie import PydanticObjectId
 
 from app.models.db.calendar_event import CalendarEvent
 from app.models.db.reminder import Reminder
+from app.utils.embedding_util import generate_embedding
 
 
 class MongoCalendarService:
@@ -29,12 +30,16 @@ class MongoCalendarService:
         # Parse date and time strings into a datetime object
         event_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
 
+        # Generate embedding for semantic search
+        title_embedding = generate_embedding(title)
+
         event = CalendarEvent(
             user_id=user_id,
             title=title,
             event_datetime=event_datetime,
             duration=duration,
             description=description,
+            title_embedding=title_embedding,
         )
         await event.insert()
         return event

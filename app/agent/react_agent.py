@@ -9,38 +9,19 @@ import asyncio
 from typing import List, Dict, Any, Optional, Callable
 from datetime import datetime
 
-# State management tools
-from app.agent.state_tools import (
-    update_working_state,
-    update_user_profile,
-)
-
-# Calendar query tools (read-only)
-from app.agent.calendar_query_tools import (
+from app.agent.mongo_tools import (
     get_events,
     get_events_on_date,
     get_todays_schedule,
     get_tomorrows_schedule,
     get_week_schedule,
     find_event_by_title,
-)
-
-# Calendar action tools (modify data)
-from app.agent.calendar_action_tools import (
+    find_available_slots,
+    check_time_availability,
     create_calendar_event,
     update_calendar_event,
     move_event_to_date,
     delete_calendar_event,
-)
-
-# Availability checking tools
-from app.agent.availability_tools import (
-    find_available_slots,
-    check_time_availability,
-)
-
-# Reminder tools
-from app.agent.reminder_tools import (
     create_reminder,
     create_reminder_for_event,
     get_upcoming_reminders,
@@ -49,11 +30,12 @@ from app.agent.reminder_tools import (
     snooze_reminder,
     delete_reminder,
 )
-
-# Message tools
 from app.agent.message_tools import (
     send_interrogative_message,
     send_declarative_message,
+)
+from app.agent.tools import (
+    update_working_state,
 )
 from app.services.conversation_service import conversation_service
 from app.services.openai_llmpool_service import llmpool
@@ -75,12 +57,11 @@ class ReactCalendarAgent:
         self.user_id = user_id
         # We no longer create our own LLM - we'll borrow from the pool
 
-        # All available tools organized by category
+        # All available tools (now including update_working_state)
         self.tools = [
-            # State management tools
+            # State management (MUST be called first)
             update_working_state,
-            update_user_profile,
-            # Calendar query tools (read-only)
+            # Calendar query tools
             get_events,
             get_events_on_date,
             get_todays_schedule,
@@ -90,7 +71,7 @@ class ReactCalendarAgent:
             # Availability tools
             find_available_slots,
             check_time_availability,
-            # Calendar action tools (modify data)
+            # Event management tools
             create_calendar_event,
             update_calendar_event,
             move_event_to_date,
@@ -131,18 +112,18 @@ class ReactCalendarAgent:
         Populate the dynamic fields in the mega prompt.
 
         Dynamic fields:
-        - {{recent_chat}}: Last 5 messages in the conversation
+        - {{Last 5 messages}}
         - {{last_state_json}}
         - {{last_tool_actions_and_result}}
         """
-
-        # Get current conversation state (excluding last_tool_calls to avoid duplication)
-        state_dict = conversation_service.get_conversation_state_for_prompt(
-            self.user_id
+        # Get recent messages
+        recent_messages = await conversation_service.format_recent_messages(
+            self.user_id, limit=5
         )
-        import json
 
-        state_json = json.dumps(state_dict, indent=2)
+        # Get current conversation state
+        current_state = conversation_service.get_conversation_state(self.user_id)
+        state_json = current_state.model_dump_json(indent=2)
 
         # Format last tool actions and results from conversation state
         # This includes all tools called in the last iteration
@@ -150,10 +131,7 @@ class ReactCalendarAgent:
 
         # Populate the template
         prompt = self.system_prompt_template
-        prompt = prompt.replace(
-            "{{recent_chat}}",
-            await conversation_service.format_recent_messages(self.user_id, limit=5),
-        )
+        prompt = prompt.replace("{{Last 5 messages}}", recent_messages)
         prompt = prompt.replace("{{last_state_json}}", state_json)
         prompt = prompt.replace("{{last_tool_actions_and_result}}", last_tool_info)
 
@@ -200,51 +178,38 @@ class ReactCalendarAgent:
         logger.info("=" * 80)
         logger.info(f"USER: {user_message}")
 
-        # CONDITIONAL STATE RESET: Check if last iteration ended with a declarative message
-        # If so, reset transient state (but keep user_profile) and clear last_tool_calls for fresh conversation
+        # INJECT USER RESPONSE: Check if the last iteration ended with a message tool
+        # If so, update that tool call's result with the current user_message
         current_state = conversation_service.get_conversation_state(self.user_id)
         if hasattr(current_state, "last_tool_calls") and current_state.last_tool_calls:
             last_tool = current_state.last_tool_calls[-1]
             last_tool_name = last_tool.get("tool_name", "")
 
-            if last_tool_name == "send_declarative_message":
+            if last_tool_name in [
+                "send_interrogative_message",
+                "send_declarative_message",
+            ]:
                 logger.info(
-                    "Last iteration ended with declarative message - resetting for fresh conversation"
+                    f"Last iteration ended with {last_tool_name}, injecting user response into result"
                 )
-                await conversation_service.reset_transient_state(self.user_id)
-                logger.info("✓ Transient state reset, user_profile preserved")
 
-                # Clear last_tool_calls so next iteration starts fresh
+                # Update the result of the last message tool with user's response
+                last_tool["result"] = {
+                    **last_tool.get("result", {}),
+                    "user_response": user_message,
+                }
+
+                # Save the updated state
                 conversation_service.update_conversation_state(
-                    self.user_id, {"last_tool_calls": []}
+                    self.user_id, {"last_tool_calls": current_state.last_tool_calls}
                 )
-                logger.info("✓ last_tool_calls cleared for fresh start")
-
-            elif last_tool_name == "send_interrogative_message":
-                logger.info(
-                    "Last iteration ended with interrogative message - maintaining context"
-                )
-                logger.info(
-                    "Agent will decide if user's response answers the question in update_working_state"
-                )
+                logger.info(f"✓ User response injected into {last_tool_name} result")
 
         # Save user message to history
         await conversation_service.save_message(self.user_id, "user", user_message)
 
         # Populate the system prompt with dynamic fields
         system_prompt = await self._populate_prompt()
-
-        # Debug: Log what state the LLM will see
-        logger.debug("=" * 60)
-        logger.debug("PROMPT STATE BEING SENT TO LLM:")
-        state_for_prompt = conversation_service.get_conversation_state_for_prompt(
-            self.user_id
-        )
-        logger.debug(f"  State dict keys: {list(state_for_prompt.keys())}")
-        logger.debug(f"  Intent in prompt: {state_for_prompt.get('intent')}")
-        logger.debug(f"  Context in prompt: {state_for_prompt.get('context')}")
-        logger.debug(f"  Planning in prompt: {state_for_prompt.get('planning')}")
-        logger.debug("=" * 60)
 
         # Initialize conversation with system prompt and user message
         messages: List[Any] = [
@@ -261,354 +226,50 @@ class ReactCalendarAgent:
             iteration += 1
             logger.info(f"\n--- Iteration {iteration} ---")
 
-            # Log current state at start of iteration
-            current_state = conversation_service.get_conversation_state(self.user_id)
-            logger.info("=" * 60)
-            logger.info("STATE AT ITERATION START:")
-            logger.info(f"  User ID: {self.user_id}")
-            logger.info(f"  State object ID: {id(current_state)}")
-            logger.info(
-                f"  Has last_tool_calls: {hasattr(current_state, 'last_tool_calls') and len(current_state.last_tool_calls) > 0}"
-            )
-            if hasattr(current_state, "intent"):
-                logger.info(f"  Intent: {current_state.intent}")
-            if hasattr(current_state, "context"):
-                logger.info(f"  Context: {current_state.context}")
-            if hasattr(current_state, "planning"):
-                logger.info(f"  Planning: {current_state.planning}")
-            if hasattr(current_state, "confidence"):
-                logger.info(f"  Confidence: {current_state.confidence}")
-            if hasattr(current_state, "user_profile") and current_state.user_profile:
-                logger.info(
-                    f"  User Profile Keys: {list(current_state.user_profile.keys())}"
-                )
-            logger.info("=" * 60)
-
             # Calculate tokens needed for this request
             tokens_needed = num_tokens_from_messages(messages, model_name=OPENAI_MODEL)
             tokens_needed += 5000  # Buffer for response
 
             logger.debug(f"Estimated tokens needed: {tokens_needed}")
 
-            # Retry logic for protocol violations
-            max_retries = 2
-            retry_count = 0
-            response = None
-            race_condition_detected = False
+            # Borrow LLM from pool
+            try:
+                slot, lock_token = await llmpool.borrow_llm(tokens_needed)
+                llm_with_tools = slot.llm.bind_tools(self.tools)
 
-            while retry_count < max_retries:
-                # Borrow LLM from pool
-                try:
-                    slot, lock_token = await llmpool.borrow_llm(tokens_needed)
-                    llm_with_tools = slot.llm.bind_tools(self.tools)
+                logger.debug(
+                    f"Borrowed LLM slot '{slot.name}' for iteration {iteration}"
+                )
 
-                    logger.debug(
-                        f"Borrowed LLM slot '{slot.name}' for iteration {iteration}"
-                        + (f" (retry {retry_count})" if retry_count > 0 else "")
-                    )
+                # Call LLM with tools
+                response = llm_with_tools.invoke(messages)
 
-                    # Call LLM with tools
-                    response = llm_with_tools.invoke(messages)
-
-                    # Extract actual token usage
-                    actual_tokens = tokens_needed
-                    if hasattr(response, "response_metadata"):
-                        usage = response.response_metadata.get("token_usage", {})
-                        if usage:
-                            actual_tokens = usage.get("prompt_tokens", 0) + usage.get(
-                                "completion_tokens", 0
-                            )
-                            logger.debug(f"Actual tokens used: {actual_tokens}")
-
-                    # Record usage and return the slot
-                    llmpool.record_slot_usage(slot, actual_tokens)
-                    llmpool.return_llm(slot, lock_token)
-
-                    # Check for protocol violations
-                    if not response.tool_calls:
-                        logger.error("=" * 80)
-                        logger.error(f"PROTOCOL VIOLATION [RED] - NO TOOL CALLS")
-                        logger.error(f"Retry: {retry_count + 1}/{max_retries}")
-                        logger.error("-" * 80)
-                        logger.error(f"Response type: {type(response)}")
-                        logger.error(
-                            f"Response content: {response.content if hasattr(response, 'content') else 'N/A'}"
+                # Extract actual token usage
+                actual_tokens = tokens_needed
+                if hasattr(response, "response_metadata"):
+                    usage = response.response_metadata.get("token_usage", {})
+                    if usage:
+                        actual_tokens = usage.get("prompt_tokens", 0) + usage.get(
+                            "completion_tokens", 0
                         )
-                        logger.error(
-                            f"Has tool_calls attr: {hasattr(response, 'tool_calls')}"
-                        )
-                        logger.error(f"Tool calls value: {response.tool_calls}")
-                        logger.error("-" * 80)
-                        logger.error("MESSAGES SENT TO LLM:")
-                        for idx, msg in enumerate(messages):
-                            msg_type = type(msg).__name__
-                            msg_preview = (
-                                str(msg.content)[:200]
-                                if hasattr(msg, "content")
-                                else str(msg)[:200]
-                            )
-                            logger.error(f"  [{idx}] {msg_type}: {msg_preview}...")
-                        logger.error("=" * 80)
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            # Add a system message to guide the retry
-                            messages.append(
-                                SystemMessage(
-                                    content="Remember: You must use tools to communicate. You cannot respond with plain text. "
-                                    "Every response needs at least 2 tool calls:\n"
-                                    "1) update_working_state - to reflect what you understand\n"
-                                    "2) At least one action tool - to execute your plan (query/message/management)\n"
-                                    "Please try again using the appropriate tools."
-                                )
-                            )
-                            continue
-                        else:
-                            # Final retry failed - force a message tool
-                            logger.error(
-                                "All retries exhausted - forcing fallback response"
-                            )
-                            final_response = "I apologize, I'm having trouble processing your request right now. Could you please rephrase?"
-                            await conversation_service.save_message(
-                                self.user_id, "assistant", final_response
-                            )
-                            return final_response
+                        logger.debug(f"Actual tokens used: {actual_tokens}")
 
-                    elif len(response.tool_calls) < 2:
-                        tool_names = [tc["name"] for tc in response.tool_calls]
-                        logger.error("=" * 80)
-                        logger.error(
-                            f"PROTOCOL VIOLATION [YELLOW] - INSUFFICIENT TOOL CALLS"
-                        )
-                        logger.error(f"Retry: {retry_count + 1}/{max_retries}")
-                        logger.error("-" * 80)
-                        logger.error(f"Expected: Minimum 2 tool calls")
-                        logger.error(f"Actual: {len(response.tool_calls)} tool call(s)")
-                        logger.error(f"Tools called: {tool_names}")
-                        logger.error("-" * 80)
-                        logger.error("DETAILED TOOL CALL INFORMATION:")
-                        for idx, tc in enumerate(response.tool_calls):
-                            logger.error(f"  Tool Call {idx + 1}:")
-                            logger.error(f"    Name: {tc['name']}")
-                            logger.error(f"    ID: {tc.get('id', 'N/A')}")
-                            logger.error(f"    Arguments: {tc.get('args', {})}")
-                        logger.error("-" * 80)
-                        logger.error("VIOLATION ANALYSIS:")
-                        has_state_update = "update_working_state" in tool_names
-                        has_non_state_tool = any(
-                            tn != "update_working_state" and tn != "update_user_profile"
-                            for tn in tool_names
-                        )
+                # Record usage and return the slot
+                llmpool.record_slot_usage(slot, actual_tokens)
+                llmpool.return_llm(slot, lock_token)
 
-                        logger.error(
-                            f"  {'✓' if has_state_update else '✗'} Has update_working_state: {has_state_update}"
-                        )
-                        logger.error(
-                            f"  {'✓' if has_non_state_tool else '✗'} Has non-state action tool: {has_non_state_tool}"
-                        )
-                        logger.error("-" * 80)
-                        logger.error("WHAT'S MISSING:")
-                        if not has_state_update:
-                            logger.error(
-                                "  ⚠️  CRITICAL: update_working_state must be called to track your understanding"
-                            )
-                        if not has_non_state_tool:
-                            logger.error(
-                                "  ⚠️  CRITICAL: Need at least one action tool (message/query/calendar/reminder)"
-                            )
-                            if has_state_update:
-                                logger.error(
-                                    "  💡 HINT: You've updated your state but haven't EXECUTED anything!"
-                                )
-                                logger.error(
-                                    "         State tracks WHAT you understand. Actions execute WHAT you do."
-                                )
-                                logger.error(
-                                    "         If you planned something in state.planning, now DO it with an action tool!"
-                                )
-                        logger.error("-" * 80)
-                        logger.error("MESSAGES SENT TO LLM:")
-                        for idx, msg in enumerate(messages):
-                            msg_type = type(msg).__name__
-                            msg_preview = (
-                                str(msg.content)[:200]
-                                if hasattr(msg, "content")
-                                else str(msg)[:200]
-                            )
-                            logger.error(f"  [{idx}] {msg_type}: {msg_preview}...")
-                        logger.error("=" * 80)
-                        retry_count += 1
-                        if retry_count < max_retries:
-                            # Add a system message to guide the retry
-                            retry_guidance = (
-                                "Remember: Every iteration requires at least 2 tool calls:\n"
-                                "1) update_working_state - integrate your previous results and user input to update your understanding\n"
-                                "2) At least one action tool - execute your plan (send a message, query data, or manage calendar/reminders)\n\n"
-                            )
-
-                            # Add specific hint if only state update was called
-                            if (
-                                len(response.tool_calls) == 1
-                                and response.tool_calls[0]["name"]
-                                == "update_working_state"
-                            ):
-                                retry_guidance += (
-                                    "IMPORTANT: You updated your state but forgot to execute an action!\n"
-                                    "State management (update_working_state) tracks WHAT you understand.\n"
-                                    "Action tools execute WHAT you need to do.\n\n"
-                                    "If your state says 'next_microstep: ask user about X', you must ALSO call "
-                                    "send_interrogative_message in the SAME iteration. Both together - understanding AND action!"
-                                )
-
-                            messages.append(SystemMessage(content=retry_guidance))
-                            continue
-                        else:
-                            # Final retry failed - let it proceed but log
-                            logger.error(
-                                "All retries exhausted - proceeding with insufficient tool calls"
-                            )
-                            logger.error(f"Final tool calls: {tool_names}")
-                            break
-
-                    # Check for max 7 tools violation (non-blocking warning)
-                    elif len(response.tool_calls) > 7:
-                        logger.warning("=" * 80)
-                        logger.warning(f"EFFICIENCY WARNING - TOO MANY TOOL CALLS")
-                        logger.warning(f"Recommended maximum: 7 tool calls")
-                        logger.warning(f"Actual: {len(response.tool_calls)} tool calls")
-                        logger.warning("-" * 80)
-                        tool_names = [tc["name"] for tc in response.tool_calls]
-                        logger.warning(f"Tools called: {tool_names}")
-                        logger.warning("-" * 80)
-                        logger.warning(
-                            "IMPACT: Increased response time and token usage. "
-                            "Consider splitting complex operations across multiple iterations."
-                        )
-                        logger.warning("=" * 80)
-
-                        # Add coaching message for next iteration (non-blocking)
-                        messages.append(
-                            SystemMessage(
-                                content=f"Note: You called {len(response.tool_calls)} tools in your last response. "
-                                "The recommended maximum is 7 tools per iteration (update_working_state + 1 action + up to 5 preemptive). "
-                                "While this works, it may impact response time. Consider focusing on the most essential tools "
-                                "and splitting complex operations across iterations when possible."
-                            )
-                        )
-                        # Continue processing - this is just a warning
-                        break
-
-                    # Check for race conditions (same entity modified multiple times)
-                    else:
-                        # Validate no race conditions before proceeding
-                        event_ids_touched = []
-                        reminder_ids_touched = []
-                        race_condition_errors = []
-
-                        for tool_call in response.tool_calls:
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call.get("args", {})
-
-                            # Track event modifications
-                            if tool_name in [
-                                "update_calendar_event",
-                                "move_event_to_date",
-                                "delete_calendar_event",
-                            ]:
-                                event_id = tool_args.get("event_id")
-                                if event_id:
-                                    if event_id in event_ids_touched:
-                                        race_condition_errors.append(
-                                            f"Event ID '{event_id}' modified multiple times (tools: {tool_name})"
-                                        )
-                                        race_condition_detected = True
-                                    event_ids_touched.append(event_id)
-
-                            # Track reminder modifications
-                            if tool_name in [
-                                "mark_reminder_completed",
-                                "snooze_reminder",
-                                "delete_reminder",
-                            ]:
-                                reminder_id = tool_args.get("reminder_id")
-                                if reminder_id:
-                                    if reminder_id in reminder_ids_touched:
-                                        race_condition_errors.append(
-                                            f"Reminder ID '{reminder_id}' modified multiple times (tools: {tool_name})"
-                                        )
-                                        race_condition_detected = True
-                                    reminder_ids_touched.append(reminder_id)
-
-                        if race_condition_detected:
-                            logger.critical("=" * 80)
-                            logger.critical(
-                                "CRITICAL PROTOCOL VIOLATION - RACE CONDITION DETECTED"
-                            )
-                            logger.critical(f"Retry: {retry_count + 1}/{max_retries}")
-                            logger.critical("-" * 80)
-                            for error in race_condition_errors:
-                                logger.critical(f"  ⚠️  {error}")
-                            logger.critical("-" * 80)
-                            logger.critical(
-                                "DANGER: Modifying the same entity multiple times in parallel will corrupt data!"
-                            )
-                            logger.critical(
-                                "RULE: You can only perform ONE operation per event/reminder per iteration."
-                            )
-                            logger.critical("=" * 80)
-
-                            retry_count += 1
-                            if retry_count < max_retries:
-                                messages.append(
-                                    SystemMessage(
-                                        content="CRITICAL ERROR: You attempted to modify the same event or reminder "
-                                        "multiple times in the same iteration. This will corrupt data!\n\n"
-                                        f"Violations detected:\n"
-                                        + "\n".join(
-                                            f"- {err}" for err in race_condition_errors
-                                        )
-                                        + "\n\n"
-                                        "RULE: Choose ONE operation per entity per iteration.\n"
-                                        "If you need multiple changes to the same event, do them sequentially across iterations, "
-                                        "or combine them into a single update_calendar_event call.\n\n"
-                                        "Please restructure your tool calls to fix this."
-                                    )
-                                )
-                                continue
-                            else:
-                                # Hard fail on race condition after retries
-                                logger.critical(
-                                    "Race condition persists after retries - aborting to prevent data corruption"
-                                )
-                                final_response = "I encountered a processing error while trying to help you. Please try your request again."
-                                await conversation_service.save_message(
-                                    self.user_id, "assistant", final_response
-                                )
-                                return final_response
-
-                        # Valid response - break out of retry loop
-                        break
-
-                except ValueError as e:
-                    logger.error(f"Error using LLM slot: {e}")
-                    final_response = "I'm experiencing high demand right now. Please try again in a moment."
-                    await conversation_service.save_message(
-                        self.user_id, "assistant", final_response
-                    )
-                    return final_response
-                except Exception as e:
-                    logger.error(f"Unexpected error in chat: {e}", exc_info=True)
-                    final_response = (
-                        "I apologize, but I encountered an error. Please try again."
-                    )
-                    await conversation_service.save_message(
-                        self.user_id, "assistant", final_response
-                    )
-                    return final_response
-
-            # If we got here without a valid response, something went wrong
-            if not response or not response.tool_calls:
-                logger.error("Failed to get valid response after retries")
-                final_response = "I apologize, I'm having trouble processing your request. Please try again."
+            except ValueError as e:
+                logger.error(f"Error using LLM slot: {e}")
+                final_response = "I'm experiencing high demand right now. Please try again in a moment."
+                await conversation_service.save_message(
+                    self.user_id, "assistant", final_response
+                )
+                return final_response
+            except Exception as e:
+                logger.error(f"Unexpected error in chat: {e}", exc_info=True)
+                final_response = (
+                    "I apologize, but I encountered an error. Please try again."
+                )
                 await conversation_service.save_message(
                     self.user_id, "assistant", final_response
                 )
@@ -616,40 +277,43 @@ class ReactCalendarAgent:
 
             messages.append(response)
 
-            # Tool calls are guaranteed valid at this point (passed retry logic)
+            # Check if LLM called any tools
+            if not response.tool_calls:
+                # No tools called - LLM provided reasoning/response directly (ERROR STATE)
+                content = str(response.content) if response.content else ""
+                logger.warning(
+                    f"LLM responded without tool calls. This violates the protocol. Content: {content}"
+                )
+
+                # Force it to call at least the message tool
+                final_response = (
+                    content or "I apologize, I need to reconsider my approach."
+                )
+                await conversation_service.save_message(
+                    self.user_id, "assistant", final_response
+                )
+                break
+
+            # VALIDATION: Check minimum 2 tool calls (state + action)
+            if len(response.tool_calls) < 2:
+                logger.error(
+                    f"Protocol violation: Only {len(response.tool_calls)} tool call(s). Minimum is 2 (state + action)"
+                )
+                # Let it proceed but log the violation - the LLM might self-correct next iteration
+
+            # VALIDATION: Check that first tool call is update_working_state
+            first_tool_name = response.tool_calls[0]["name"]
+            if first_tool_name != "update_working_state":
+                logger.error(
+                    f"Protocol violation: First tool call must be update_working_state, got {first_tool_name}"
+                )
+                # Continue anyway - might self-correct
 
             logger.info(f"Tool calls requested: {len(response.tool_calls)}")
 
             # Track tool calls for next iteration's prompt
             tool_calls_record = []
-
-            # Validate that update_working_state was called
-            tool_names_called = [tc["name"] for tc in response.tool_calls]
-            state_update_found = "update_working_state" in tool_names_called
-
-            if not state_update_found:
-                logger.warning("=" * 80)
-                logger.warning("PROTOCOL VIOLATION - NO STATE UPDATE")
-                logger.warning("-" * 80)
-                logger.warning(
-                    f"Expected: update_working_state should be called in every iteration"
-                )
-                logger.warning(f"Actual: update_working_state NOT called")
-                logger.warning(f"Tools called instead: {tool_names_called}")
-                logger.warning("-" * 80)
-                logger.warning("DETAILED TOOL CALL INFORMATION:")
-                for idx, tc in enumerate(response.tool_calls):
-                    logger.warning(f"  Tool Call {idx + 1}:")
-                    logger.warning(f"    Name: {tc['name']}")
-                    logger.warning(f"    Arguments: {tc.get('args', {})}")
-                logger.warning("-" * 80)
-                logger.warning(
-                    "IMPACT: Without state updates, the agent loses context across iterations"
-                )
-                logger.warning(
-                    "RECOMMENDATION: Always call update_working_state to integrate new information"
-                )
-                logger.warning("=" * 80)
+            state_update_found = False
 
             # Prepare all tool call coroutines for parallel execution
             tool_coroutines = []
@@ -662,13 +326,19 @@ class ReactCalendarAgent:
                 logger.info(f"\nPreparing tool: {tool_name}")
                 logger.info(f"Arguments: {tool_args}")
 
-                # Inject user_id for all tools that need it (all except message tools)
+                # Always override user_id for all non-message and non-state tools
+                # This ensures the correct user_id is used regardless of what the LLM passes
                 if tool_name not in [
                     "send_interrogative_message",
                     "send_declarative_message",
+                    "update_working_state",
                 ]:
-                    if "user_id" not in tool_args:
-                        tool_args["user_id"] = self.user_id
+                    # Override user_id even if LLM provided one (to fix user_id mismatches)
+                    if "user_id" in tool_args and tool_args["user_id"] != self.user_id:
+                        logger.debug(
+                            f"Overriding user_id from '{tool_args['user_id']}' to '{self.user_id}'"
+                        )
+                    tool_args["user_id"] = self.user_id
 
                 # Create coroutine for this tool
                 tool_coroutines.append(self._execute_tool(tool_name, tool_args))
@@ -696,56 +366,24 @@ class ReactCalendarAgent:
                 logger.info(f"\n✓ Tool completed: {tool_name}")
                 logger.info(f"Result: {tool_result}")
 
-                # Log detailed state updates when update_working_state is called
-                if tool_name == "update_working_state":
-                    state_dict = tool_args.get("state_dict", {})
-                    logger.info("=" * 60)
-                    logger.info("LLM REQUESTED STATE UPDATE:")
-                    if "intent" in state_dict:
-                        logger.info(f"  Intent:")
-                        for key, val in state_dict["intent"].items():
-                            logger.info(f"    - {key}: {val}")
-                    if "reasoning" in state_dict:
-                        reasoning = state_dict["reasoning"]
-                        logger.info(
-                            f"  Reasoning: {reasoning[:200]}{'...' if len(reasoning) > 200 else ''}"
-                        )
-                    if "context" in state_dict:
-                        logger.info(f"  Context: {state_dict['context']}")
-                    if "planning" in state_dict:
-                        logger.info(f"  Planning: {state_dict['planning']}")
-                    if "confidence" in state_dict:
-                        logger.info(f"  Confidence: {state_dict['confidence']}")
-                    # Log any custom fields
-                    custom_fields = {
-                        k: v
-                        for k, v in state_dict.items()
-                        if k
-                        not in [
-                            "intent",
-                            "reasoning",
-                            "context",
-                            "planning",
-                            "confidence",
-                        ]
-                    }
-                    if custom_fields:
-                        logger.info(f"  Custom Fields: {list(custom_fields.keys())}")
-                    logger.info("=" * 60)
-
-                # Log user profile updates
-                if tool_name == "update_user_profile":
-                    profile_updates = tool_args.get("profile_updates", {})
-                    logger.info("=" * 60)
-                    logger.info("LLM REQUESTED PROFILE UPDATE:")
-                    for category, updates in profile_updates.items():
-                        logger.info(f"  {category}: {updates}")
-                    logger.info("=" * 60)
-
                 # Track this tool call for next iteration
                 tool_calls_record.append(
                     {"tool_name": tool_name, "args": tool_args, "result": tool_result}
                 )
+
+                # Handle state update tool specially
+                if tool_name == "update_working_state":
+                    state_update_found = True
+                    if isinstance(tool_result, dict) and tool_result.get("success"):
+                        state_dict = tool_result.get("state_dict", {})
+                        if state_dict:
+                            # Update conversation state with the new state
+                            conversation_service.update_conversation_state(
+                                self.user_id, state_dict
+                            )
+                            logger.info(
+                                f"✓ Conversation state updated from update_working_state tool"
+                            )
 
                 # Add tool result to messages
                 messages.append(
@@ -783,6 +421,9 @@ class ReactCalendarAgent:
                 self.user_id, {"last_tool_calls": tool_calls_record}
             )
 
+            if not state_update_found:
+                logger.warning("No update_working_state call found in this iteration")
+
         # Safety fallback if we hit max iterations
         if final_response is None:
             logger.warning(f"Hit max iterations ({max_iterations})")
@@ -797,10 +438,9 @@ class ReactCalendarAgent:
     async def _execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
         """Execute a tool by name with given arguments."""
         tool_map = {
-            # State management tools
+            # State management
             "update_working_state": update_working_state,
-            "update_user_profile": update_user_profile,
-            # Calendar query tools (read-only)
+            # Calendar query tools
             "get_events": get_events,
             "get_events_on_date": get_events_on_date,
             "get_todays_schedule": get_todays_schedule,
@@ -810,7 +450,7 @@ class ReactCalendarAgent:
             # Availability tools
             "find_available_slots": find_available_slots,
             "check_time_availability": check_time_availability,
-            # Calendar action tools (modify data)
+            # Event management tools
             "create_calendar_event": create_calendar_event,
             "update_calendar_event": update_calendar_event,
             "move_event_to_date": move_event_to_date,

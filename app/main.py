@@ -58,7 +58,15 @@ async def chat(msg: ChatMessage):
     WebSocket endpoint is recommended for better real-time interaction.
     """
     # Get or create agent for this user
-    if msg.user_id not in user_agents:
+    # Ensure we recreate the agent if the user_id doesn't match (prevents stale agent reuse)
+    if (
+        msg.user_id not in user_agents
+        or user_agents[msg.user_id].user_id != msg.user_id
+    ):
+        if msg.user_id in user_agents:
+            logger.warning(
+                f"Recreating agent for {msg.user_id} - user_id mismatch detected"
+            )
         user_agents[msg.user_id] = create_react_agent(msg.user_id)
 
     agent = user_agents[msg.user_id]
@@ -84,7 +92,12 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
     logger.info(f"🔗 WebSocket connection established for user: {user_id}")
 
     # Get or create agent for this user
-    if user_id not in user_agents:
+    # Ensure we recreate the agent if the user_id doesn't match (prevents stale agent reuse)
+    if user_id not in user_agents or user_agents[user_id].user_id != user_id:
+        if user_id in user_agents:
+            logger.warning(
+                f"Recreating agent for {user_id} - user_id mismatch detected"
+            )
         user_agents[user_id] = create_react_agent(user_id)
 
     agent = user_agents[user_id]

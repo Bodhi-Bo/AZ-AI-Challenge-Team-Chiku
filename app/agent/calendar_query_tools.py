@@ -8,6 +8,7 @@ import logging
 from typing import Optional
 from datetime import datetime, timedelta
 from app.services.mongo_calendar_service import calendar_service
+from app.utils.embedding_util import generate_embedding, cosine_similarity
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -163,7 +164,8 @@ async def find_event_by_title(
     user_id: str, title_query: str, date: Optional[str] = None
 ) -> dict:
     """
-    Search for events by title (case-insensitive partial match).
+    Search for events by title using semantic similarity (vector embeddings).
+    Uses cosine similarity with a 0.7 threshold for matching.
 
     **IMPORTANT**: Use this tool when you need to find the event_id for updating, moving,
     or deleting an event that the user refers to by name/title.
@@ -173,20 +175,20 @@ async def find_event_by_title(
 
     Args:
         user_id: The user's ID
-        title_query: Title or partial title to search for (case-insensitive)
+        title_query: Title or partial title to search for (semantic search enabled)
         date: Optional date to narrow search (YYYY-MM-DD format). If not provided, searches all dates.
 
     Returns:
-        dict: Matching events with their event_ids, titles, dates, and times
+        dict: Matching events with their event_ids, titles, dates, times, and similarity scores
 
     Example:
         User says "move my yoga session to tomorrow"
         1. Call find_event_by_title(user_id="user_123", title_query="yoga")
-        2. Get back event_id "691317c99da9a2b1525f35c9"
+        2. Get back event_id "691317c99da9a2b1525f35c9" with similarity score 0.95
         3. Call move_event_to_date(user_id="user_123", event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
     """
     logger.info("=" * 60)
-    logger.info("TOOL: find_event_by_title")
+    logger.info("TOOL: find_event_by_title (SEMANTIC SEARCH)")
     logger.info(
         f"Parameters: user_id={user_id}, title_query='{title_query}', date={date}"
     )
@@ -202,22 +204,51 @@ async def find_event_by_title(
             user_id, start_date, end_date
         )
 
-    # Filter events by title (case-insensitive partial match)
-    title_lower = title_query.lower()
-    matching_events = [event for event in events if title_lower in event.title.lower()]
+    # Generate embedding for the search query
+    query_embedding = generate_embedding(title_query)
 
+    # Calculate similarity scores for all events
+    SIMILARITY_THRESHOLD = 0.7
+    matching_events = []
+
+    logger.info(f"Fetched {len(events)} events for user, calculating similarities...")
+
+    for event in events:
+        # Skip events without embeddings (legacy events)
+        if not event.title_embedding:
+            # Fallback to keyword search for legacy events
+            if title_query.lower() in event.title.lower():
+                matching_events.append((event, 0.5))  # Lower score for keyword match
+                logger.info(f"  Legacy keyword match: '{event.title}' (score: 0.5)")
+            continue
+
+        # Calculate cosine similarity
+        similarity = cosine_similarity(query_embedding, event.title_embedding)
+
+        # Log all events with their similarity scores for debugging
+        logger.debug(f"  '{event.title}' similarity: {similarity:.3f}")
+
+        if similarity >= SIMILARITY_THRESHOLD:
+            matching_events.append((event, similarity))
+            logger.info(
+                f"  Match found: '{event.title}' (similarity: {similarity:.3f})"
+            )
+
+    # Sort by similarity score (descending)
+    matching_events.sort(key=lambda x: x[1], reverse=True)
+
+    # Format results
     events_list = [
         {
-            "event_id": str(
-                event.id
-            ),  # CRITICAL: Return as string for proper MongoDB ObjectId handling
+            "event_id": str(event.id),
             "title": event.title,
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
             "description": event.description,
+            "similarity_score": round(similarity, 3),  # Include similarity score
         }
-        for event in matching_events
+        for event, similarity in matching_events
     ]
 
     result = {
@@ -225,11 +256,20 @@ async def find_event_by_title(
         "query": title_query,
         "count": len(events_list),
         "events": events_list,
+        "note": (
+            "Results sorted by semantic similarity. Multiple matches returned for agent to choose from."
+            if len(events_list) > 1
+            else None
+        ),
     }
 
     if len(events_list) == 0:
-        logger.info(f"✗ No events found matching '{title_query}'")
+        logger.info(
+            f"✗ No events found matching '{title_query}' (threshold: {SIMILARITY_THRESHOLD})"
+        )
     else:
         logger.info(f"✓ Found {len(events_list)} event(s) matching '{title_query}'")
+        for event, similarity in matching_events[:3]:  # Log top 3
+            logger.info(f"  - '{event.title}' (similarity: {similarity:.3f})")
 
     return result

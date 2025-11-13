@@ -16,6 +16,9 @@ class CalendarEvent(Document):
     event_datetime: datetime  # Full datetime of the event
     duration: int  # minutes
     description: Optional[str] = None
+    title_embedding: Optional[list[float]] = (
+        None  # Vector embedding for semantic search
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
