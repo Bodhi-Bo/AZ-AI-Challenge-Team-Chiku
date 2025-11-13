@@ -131,14 +131,10 @@ class ReactCalendarAgent:
         Populate the dynamic fields in the mega prompt.
 
         Dynamic fields:
-        - {{Last 5 messages}}
+        - {{recent_chat}}: Last 5 messages in the conversation
         - {{last_state_json}}
         - {{last_tool_actions_and_result}}
         """
-        # Get recent messages
-        recent_messages = await conversation_service.format_recent_messages(
-            self.user_id, limit=5
-        )
 
         # Get current conversation state (excluding last_tool_calls to avoid duplication)
         state_dict = conversation_service.get_conversation_state_for_prompt(
@@ -154,7 +150,10 @@ class ReactCalendarAgent:
 
         # Populate the template
         prompt = self.system_prompt_template
-        prompt = prompt.replace("{{Last 5 messages}}", recent_messages)
+        prompt = prompt.replace(
+            "{{recent_chat}}",
+            await conversation_service.format_recent_messages(self.user_id, limit=5),
+        )
         prompt = prompt.replace("{{last_state_json}}", state_json)
         prompt = prompt.replace("{{last_tool_actions_and_result}}", last_tool_info)
 
@@ -202,7 +201,7 @@ class ReactCalendarAgent:
         logger.info(f"USER: {user_message}")
 
         # CONDITIONAL STATE RESET: Check if last iteration ended with a declarative message
-        # If so, reset transient state (but keep user_profile) for fresh conversation
+        # If so, reset transient state (but keep user_profile) and clear last_tool_calls for fresh conversation
         current_state = conversation_service.get_conversation_state(self.user_id)
         if hasattr(current_state, "last_tool_calls") and current_state.last_tool_calls:
             last_tool = current_state.last_tool_calls[-1]
@@ -210,28 +209,23 @@ class ReactCalendarAgent:
 
             if last_tool_name == "send_declarative_message":
                 logger.info(
-                    "Last iteration ended with declarative message - resetting transient state for new conversation"
+                    "Last iteration ended with declarative message - resetting for fresh conversation"
                 )
-                conversation_service.reset_transient_state(self.user_id)
+                await conversation_service.reset_transient_state(self.user_id)
                 logger.info("✓ Transient state reset, user_profile preserved")
+
+                # Clear last_tool_calls so next iteration starts fresh
+                conversation_service.update_conversation_state(
+                    self.user_id, {"last_tool_calls": []}
+                )
+                logger.info("✓ last_tool_calls cleared for fresh start")
 
             elif last_tool_name == "send_interrogative_message":
                 logger.info(
-                    f"Last iteration ended with interrogative message - maintaining context and injecting user response"
-                )
-
-                # Update the result of the interrogative message with user's response
-                last_tool["result"] = {
-                    **last_tool.get("result", {}),
-                    "user_response": user_message,
-                }
-
-                # Save the updated state
-                conversation_service.update_conversation_state(
-                    self.user_id, {"last_tool_calls": current_state.last_tool_calls}
+                    "Last iteration ended with interrogative message - maintaining context"
                 )
                 logger.info(
-                    f"✓ User response injected into interrogative message result"
+                    "Agent will decide if user's response answers the question in update_working_state"
                 )
 
         # Save user message to history
@@ -239,6 +233,18 @@ class ReactCalendarAgent:
 
         # Populate the system prompt with dynamic fields
         system_prompt = await self._populate_prompt()
+
+        # Debug: Log what state the LLM will see
+        logger.debug("=" * 60)
+        logger.debug("PROMPT STATE BEING SENT TO LLM:")
+        state_for_prompt = conversation_service.get_conversation_state_for_prompt(
+            self.user_id
+        )
+        logger.debug(f"  State dict keys: {list(state_for_prompt.keys())}")
+        logger.debug(f"  Intent in prompt: {state_for_prompt.get('intent')}")
+        logger.debug(f"  Context in prompt: {state_for_prompt.get('context')}")
+        logger.debug(f"  Planning in prompt: {state_for_prompt.get('planning')}")
+        logger.debug("=" * 60)
 
         # Initialize conversation with system prompt and user message
         messages: List[Any] = [
@@ -259,6 +265,11 @@ class ReactCalendarAgent:
             current_state = conversation_service.get_conversation_state(self.user_id)
             logger.info("=" * 60)
             logger.info("STATE AT ITERATION START:")
+            logger.info(f"  User ID: {self.user_id}")
+            logger.info(f"  State object ID: {id(current_state)}")
+            logger.info(
+                f"  Has last_tool_calls: {hasattr(current_state, 'last_tool_calls') and len(current_state.last_tool_calls) > 0}"
+            )
             if hasattr(current_state, "intent"):
                 logger.info(f"  Intent: {current_state.intent}")
             if hasattr(current_state, "context"):
@@ -283,6 +294,7 @@ class ReactCalendarAgent:
             max_retries = 2
             retry_count = 0
             response = None
+            race_condition_detected = False
 
             while retry_count < max_retries:
                 # Borrow LLM from pool
@@ -342,8 +354,11 @@ class ReactCalendarAgent:
                             # Add a system message to guide the retry
                             messages.append(
                                 SystemMessage(
-                                    content="ERROR: You must call tools. You cannot respond with plain text. "
-                                    "Call update_working_state first, then at least one other tool."
+                                    content="Remember: You must use tools to communicate. You cannot respond with plain text. "
+                                    "Every response needs at least 2 tool calls:\n"
+                                    "1) update_working_state - to reflect what you understand\n"
+                                    "2) At least one action tool - to execute your plan (query/message/management)\n"
+                                    "Please try again using the appropriate tools."
                                 )
                             )
                             continue
@@ -379,39 +394,8 @@ class ReactCalendarAgent:
                         logger.error("-" * 80)
                         logger.error("VIOLATION ANALYSIS:")
                         has_state_update = "update_working_state" in tool_names
-                        has_message_tool = (
-                            "send_interrogative_message" in tool_names
-                            or "send_declarative_message" in tool_names
-                        )
-                        has_query_tool = any(
-                            tn
-                            in [
-                                "get_events",
-                                "get_events_on_date",
-                                "get_todays_schedule",
-                                "get_tomorrows_schedule",
-                                "get_week_schedule",
-                                "find_event_by_title",
-                                "find_available_slots",
-                                "check_time_availability",
-                                "get_upcoming_reminders",
-                                "get_pending_reminders",
-                            ]
-                            for tn in tool_names
-                        )
-                        has_action_tool = any(
-                            tn
-                            in [
-                                "create_calendar_event",
-                                "update_calendar_event",
-                                "move_event_to_date",
-                                "delete_calendar_event",
-                                "create_reminder",
-                                "create_reminder_for_event",
-                                "mark_reminder_completed",
-                                "snooze_reminder",
-                                "delete_reminder",
-                            ]
+                        has_non_state_tool = any(
+                            tn != "update_working_state" and tn != "update_user_profile"
                             for tn in tool_names
                         )
 
@@ -419,30 +403,27 @@ class ReactCalendarAgent:
                             f"  {'✓' if has_state_update else '✗'} Has update_working_state: {has_state_update}"
                         )
                         logger.error(
-                            f"  {'✓' if has_message_tool else '✗'} Has message tool: {has_message_tool}"
-                        )
-                        logger.error(
-                            f"  {'✓' if has_query_tool else '✗'} Has query tool: {has_query_tool}"
-                        )
-                        logger.error(
-                            f"  {'✓' if has_action_tool else '✗'} Has action tool: {has_action_tool}"
+                            f"  {'✓' if has_non_state_tool else '✗'} Has non-state action tool: {has_non_state_tool}"
                         )
                         logger.error("-" * 80)
                         logger.error("WHAT'S MISSING:")
                         if not has_state_update:
                             logger.error(
-                                "  ⚠️  CRITICAL: update_working_state must be called (even if just refining reasoning)"
+                                "  ⚠️  CRITICAL: update_working_state must be called to track your understanding"
                             )
-                        if not (has_message_tool or has_query_tool or has_action_tool):
+                        if not has_non_state_tool:
                             logger.error(
-                                "  ⚠️  CRITICAL: Need at least one action (message/query/management tool)"
+                                "  ⚠️  CRITICAL: Need at least one action tool (message/query/calendar/reminder)"
                             )
                             if has_state_update:
                                 logger.error(
-                                    "  💡 HINT: Did you write a plan in state.next_microstep but forget to EXECUTE it?"
+                                    "  💡 HINT: You've updated your state but haven't EXECUTED anything!"
                                 )
                                 logger.error(
-                                    "         State is PLANNING, actions are EXECUTING. Both required!"
+                                    "         State tracks WHAT you understand. Actions execute WHAT you do."
+                                )
+                                logger.error(
+                                    "         If you planned something in state.planning, now DO it with an action tool!"
                                 )
                         logger.error("-" * 80)
                         logger.error("MESSAGES SENT TO LLM:")
@@ -459,9 +440,9 @@ class ReactCalendarAgent:
                         if retry_count < max_retries:
                             # Add a system message to guide the retry
                             retry_guidance = (
-                                "ERROR: You must call at least 2 tools per iteration: "
-                                "1) update_working_state and "
-                                "2) At least one action tool (query, calendar action, or message tool). "
+                                "Remember: Every iteration requires at least 2 tool calls:\n"
+                                "1) update_working_state - integrate your previous results and user input to update your understanding\n"
+                                "2) At least one action tool - execute your plan (send a message, query data, or manage calendar/reminders)\n\n"
                             )
 
                             # Add specific hint if only state update was called
@@ -471,9 +452,11 @@ class ReactCalendarAgent:
                                 == "update_working_state"
                             ):
                                 retry_guidance += (
-                                    "CRITICAL HINT: You called update_working_state but forgot the action! "
-                                    "If your state says 'next_microstep: ask user...', you must ALSO call send_interrogative_message in the SAME iteration. "
-                                    "State is PLANNING what you'll do. Actions are EXECUTING the plan. Both required together!"
+                                    "IMPORTANT: You updated your state but forgot to execute an action!\n"
+                                    "State management (update_working_state) tracks WHAT you understand.\n"
+                                    "Action tools execute WHAT you need to do.\n\n"
+                                    "If your state says 'next_microstep: ask user about X', you must ALSO call "
+                                    "send_interrogative_message in the SAME iteration. Both together - understanding AND action!"
                                 )
 
                             messages.append(SystemMessage(content=retry_guidance))
@@ -485,7 +468,123 @@ class ReactCalendarAgent:
                             )
                             logger.error(f"Final tool calls: {tool_names}")
                             break
+
+                    # Check for max 7 tools violation (non-blocking warning)
+                    elif len(response.tool_calls) > 7:
+                        logger.warning("=" * 80)
+                        logger.warning(f"EFFICIENCY WARNING - TOO MANY TOOL CALLS")
+                        logger.warning(f"Recommended maximum: 7 tool calls")
+                        logger.warning(f"Actual: {len(response.tool_calls)} tool calls")
+                        logger.warning("-" * 80)
+                        tool_names = [tc["name"] for tc in response.tool_calls]
+                        logger.warning(f"Tools called: {tool_names}")
+                        logger.warning("-" * 80)
+                        logger.warning(
+                            "IMPACT: Increased response time and token usage. "
+                            "Consider splitting complex operations across multiple iterations."
+                        )
+                        logger.warning("=" * 80)
+
+                        # Add coaching message for next iteration (non-blocking)
+                        messages.append(
+                            SystemMessage(
+                                content=f"Note: You called {len(response.tool_calls)} tools in your last response. "
+                                "The recommended maximum is 7 tools per iteration (update_working_state + 1 action + up to 5 preemptive). "
+                                "While this works, it may impact response time. Consider focusing on the most essential tools "
+                                "and splitting complex operations across iterations when possible."
+                            )
+                        )
+                        # Continue processing - this is just a warning
+                        break
+
+                    # Check for race conditions (same entity modified multiple times)
                     else:
+                        # Validate no race conditions before proceeding
+                        event_ids_touched = []
+                        reminder_ids_touched = []
+                        race_condition_errors = []
+
+                        for tool_call in response.tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_args = tool_call.get("args", {})
+
+                            # Track event modifications
+                            if tool_name in [
+                                "update_calendar_event",
+                                "move_event_to_date",
+                                "delete_calendar_event",
+                            ]:
+                                event_id = tool_args.get("event_id")
+                                if event_id:
+                                    if event_id in event_ids_touched:
+                                        race_condition_errors.append(
+                                            f"Event ID '{event_id}' modified multiple times (tools: {tool_name})"
+                                        )
+                                        race_condition_detected = True
+                                    event_ids_touched.append(event_id)
+
+                            # Track reminder modifications
+                            if tool_name in [
+                                "mark_reminder_completed",
+                                "snooze_reminder",
+                                "delete_reminder",
+                            ]:
+                                reminder_id = tool_args.get("reminder_id")
+                                if reminder_id:
+                                    if reminder_id in reminder_ids_touched:
+                                        race_condition_errors.append(
+                                            f"Reminder ID '{reminder_id}' modified multiple times (tools: {tool_name})"
+                                        )
+                                        race_condition_detected = True
+                                    reminder_ids_touched.append(reminder_id)
+
+                        if race_condition_detected:
+                            logger.critical("=" * 80)
+                            logger.critical(
+                                "CRITICAL PROTOCOL VIOLATION - RACE CONDITION DETECTED"
+                            )
+                            logger.critical(f"Retry: {retry_count + 1}/{max_retries}")
+                            logger.critical("-" * 80)
+                            for error in race_condition_errors:
+                                logger.critical(f"  ⚠️  {error}")
+                            logger.critical("-" * 80)
+                            logger.critical(
+                                "DANGER: Modifying the same entity multiple times in parallel will corrupt data!"
+                            )
+                            logger.critical(
+                                "RULE: You can only perform ONE operation per event/reminder per iteration."
+                            )
+                            logger.critical("=" * 80)
+
+                            retry_count += 1
+                            if retry_count < max_retries:
+                                messages.append(
+                                    SystemMessage(
+                                        content="CRITICAL ERROR: You attempted to modify the same event or reminder "
+                                        "multiple times in the same iteration. This will corrupt data!\n\n"
+                                        f"Violations detected:\n"
+                                        + "\n".join(
+                                            f"- {err}" for err in race_condition_errors
+                                        )
+                                        + "\n\n"
+                                        "RULE: Choose ONE operation per entity per iteration.\n"
+                                        "If you need multiple changes to the same event, do them sequentially across iterations, "
+                                        "or combine them into a single update_calendar_event call.\n\n"
+                                        "Please restructure your tool calls to fix this."
+                                    )
+                                )
+                                continue
+                            else:
+                                # Hard fail on race condition after retries
+                                logger.critical(
+                                    "Race condition persists after retries - aborting to prevent data corruption"
+                                )
+                                final_response = "I encountered a processing error while trying to help you. Please try your request again."
+                                await conversation_service.save_message(
+                                    self.user_id, "assistant", final_response
+                                )
+                                return final_response
+
                         # Valid response - break out of retry loop
                         break
 
@@ -524,15 +623,17 @@ class ReactCalendarAgent:
             # Track tool calls for next iteration's prompt
             tool_calls_record = []
 
-            # Validate that update_working_state was called (regardless of position)
+            # Validate that update_working_state was called
             tool_names_called = [tc["name"] for tc in response.tool_calls]
             state_update_found = "update_working_state" in tool_names_called
 
             if not state_update_found:
                 logger.warning("=" * 80)
-                logger.warning("PROTOCOL RECOMMENDATION VIOLATION - NO STATE UPDATE")
+                logger.warning("PROTOCOL VIOLATION - NO STATE UPDATE")
                 logger.warning("-" * 80)
-                logger.warning(f"Expected: update_working_state should be called")
+                logger.warning(
+                    f"Expected: update_working_state should be called in every iteration"
+                )
                 logger.warning(f"Actual: update_working_state NOT called")
                 logger.warning(f"Tools called instead: {tool_names_called}")
                 logger.warning("-" * 80)
@@ -542,7 +643,12 @@ class ReactCalendarAgent:
                     logger.warning(f"    Name: {tc['name']}")
                     logger.warning(f"    Arguments: {tc.get('args', {})}")
                 logger.warning("-" * 80)
-                logger.warning("IMPACT: Poor context tracking across iterations")
+                logger.warning(
+                    "IMPACT: Without state updates, the agent loses context across iterations"
+                )
+                logger.warning(
+                    "RECOMMENDATION: Always call update_working_state to integrate new information"
+                )
                 logger.warning("=" * 80)
 
             # Prepare all tool call coroutines for parallel execution

@@ -14,9 +14,12 @@ class Message(BaseModel):
 
     id: Optional[str] = Field(None, alias="_id")
     user_id: str
-    timestamp: datetime = Field(default_factory=datetime.now)
+    session_id: str  # Groups messages by conversation session
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
     role: str  # "user" or "assistant"
     content: str
+    is_old: bool = False  # Marks messages from completed conversations
 
     class Config:
         populate_by_name = True
@@ -25,6 +28,9 @@ class Message(BaseModel):
 
 class ConversationState(BaseModel):
     """Represents the current working state of a conversation."""
+
+    # Session tracking
+    session_id: Optional[str] = None  # Current conversation session ID
 
     # PERSISTENT across conversations - learnings about the user
     user_profile: Dict[str, Any] = Field(default_factory=dict)
@@ -60,11 +66,25 @@ class ConversationService:
         db = await get_mongo_database()
         messages = db.messages
 
+        # Get current session_id from conversation state
+        current_state = self.get_conversation_state(user_id)
+        session_id = current_state.session_id
+
+        # If no session_id exists, create one (first message ever)
+        if not session_id:
+            session_id = str(ObjectId())
+            current_state.session_id = session_id
+            self.conversation_states[user_id] = current_state
+
+        now = datetime.now()
         message_dict = {
             "user_id": user_id,
-            "timestamp": datetime.now(),
+            "session_id": session_id,
+            "created_at": now,
+            "updated_at": now,
             "role": role,
             "content": content,
+            "is_old": False,
         }
 
         result = await messages.insert_one(message_dict)
@@ -73,13 +93,22 @@ class ConversationService:
         return Message(**message_dict)
 
     async def get_recent_messages(self, user_id: str, limit: int = 5) -> List[Message]:
-        """Get the most recent messages for a user."""
+        """Get the most recent messages for a user that are not marked as old."""
         from app.utils.mongo_client import get_mongo_database
 
         db = await get_mongo_database()
         messages = db.messages
 
-        cursor = messages.find({"user_id": user_id}).sort("timestamp", -1).limit(limit)
+        cursor = (
+            messages.find(
+                {
+                    "user_id": user_id,
+                    "is_old": False,  # Only get current conversation messages
+                }
+            )
+            .sort("created_at", -1)
+            .limit(limit)
+        )
 
         # Reverse to get chronological order (oldest to newest)
         messages_list = []
@@ -126,18 +155,44 @@ class ConversationService:
         """Reset the conversation state for a user."""
         self.conversation_states[user_id] = ConversationState()
 
-    def reset_transient_state(self, user_id: str) -> None:
+    async def reset_transient_state(self, user_id: str) -> None:
         """
         Reset only transient conversation state, preserving user_profile.
         Called when starting a new conversation after a declarative message.
+        Also marks all messages from current session as old and generates new session_id.
         """
         current_state = self.get_conversation_state(user_id)
         preserved_profile = current_state.user_profile.copy()
+        current_session_id = current_state.session_id
 
-        # Reset to fresh state but keep the profile
+        # Mark all messages from current session as old
+        if current_session_id:
+            await self.mark_messages_as_old(user_id, current_session_id)
+
+        # Generate new session_id for next conversation
+        new_session_id = str(ObjectId())
+
+        # Reset to fresh state but keep the profile and assign new session
         self.conversation_states[user_id] = ConversationState(
-            user_profile=preserved_profile
+            user_profile=preserved_profile, session_id=new_session_id
         )
+
+    async def mark_messages_as_old(self, user_id: str, session_id: str) -> int:
+        """
+        Mark all messages from a specific session as old.
+        Returns the count of messages updated.
+        """
+        from app.utils.mongo_client import get_mongo_database
+
+        db = await get_mongo_database()
+        messages = db.messages
+
+        result = await messages.update_many(
+            {"user_id": user_id, "session_id": session_id, "is_old": False},
+            {"$set": {"is_old": True, "updated_at": datetime.now()}},
+        )
+
+        return result.modified_count
 
     def _deep_merge(
         self, base: Dict[str, Any], update: Dict[str, Any]
