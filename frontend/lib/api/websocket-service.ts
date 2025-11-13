@@ -17,7 +17,7 @@ export class WebSocketService {
     onOpen?: () => void,
     onClose?: () => void
   ) {
-    const url = `${process.env.NEXT_PUBLIC_WEBSOCKET_URL}/${this.userId}`;
+    const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/ws/${this.userId}`;
     console.log('🔌 Connecting to:', url);
 
     this.ws = new WebSocket(url);
@@ -94,7 +94,9 @@ export class WebSocketService {
   ) {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`🔄 Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+      console.log(
+        `🔄 Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      );
       setTimeout(() => {
         this.connect(onMessage, onOpen, onClose);
       }, 2000);

@@ -1,10 +1,13 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, List
 import json
 import logging
 
 from app.utils.mongo_client import init_db
+from app.services.mongo_calendar_service import MongoCalendarService
+from app.services.conversation_service import ConversationService
 
 
 # Configure logging
@@ -15,7 +18,19 @@ logging.basicConfig(
 
 app = FastAPI(title="Calendar Assistant (Chiku - ReAct)", version="0.2.0")
 
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure this properly for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Store agent instances per user
+# Initialize calendar service
+calendar_service = MongoCalendarService()
+conversation_service = ConversationService()
 
 
 @app.on_event("startup")
@@ -44,6 +59,70 @@ class ChatMessage(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+
+
+class CalendarEventResponse(BaseModel):
+    """Response model for a single calendar event."""
+
+    _id: str
+    user_id: str
+    title: str
+    date: str
+    start_time: str
+    duration: int
+    description: str | None
+    event_datetime: str
+    created_at: str
+    updated_at: str
+
+
+class CalendarEventsResponse(BaseModel):
+    """Response model for calendar events in a date range."""
+
+    user_id: str
+    start_date: str
+    end_date: str
+    events: List[CalendarEventResponse]
+    total: int
+
+
+class ReminderResponse(BaseModel):
+    """Response model for a single reminder."""
+
+    _id: str
+    user_id: str
+    title: str
+    reminder_datetime: str
+    priority: str
+    status: str
+    event_id: str | None
+    notes: str | None
+
+
+class RemindersResponse(BaseModel):
+    """Response model for upcoming reminders."""
+
+    user_id: str
+    hours_ahead: int
+    reminders: List[ReminderResponse]
+    total: int
+
+
+class MessageResponse(BaseModel):
+    """Response model for a single message."""
+
+    _id: str
+    role: str
+    content: str
+    timestamp: str
+
+
+class ChatHistoryResponse(BaseModel):
+    """Response model for chat history."""
+
+    user_id: str
+    messages: List[MessageResponse]
+    total: int
 
 
 @app.get("/health")
@@ -75,6 +154,153 @@ async def chat(msg: ChatMessage):
     response_text = await agent.chat(msg.text)
 
     return ChatResponse(reply=response_text)
+
+
+@app.get("/events/{user_id}/range", response_model=CalendarEventsResponse)
+async def get_events_range(
+    user_id: str,
+    start_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
+    end_date: str = Query(..., description="End date in YYYY-MM-DD format"),
+):
+    """
+    Get calendar events for a user within a date range.
+
+    Args:
+        user_id: User identifier
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+
+    Returns:
+        CalendarEventsResponse with events in the specified range
+    """
+    try:
+        # Fetch events from the database
+        events = await calendar_service.get_events_by_date_range(
+            user_id=user_id, start_date=start_date, end_date=end_date
+        )
+
+        # Convert CalendarEvent documents to response format
+        event_responses = [
+            CalendarEventResponse(
+                _id=str(event.id),
+                user_id=event.user_id,
+                title=event.title,
+                date=event.date,
+                start_time=event.start_time,
+                duration=event.duration,
+                description=event.description,
+                event_datetime=event.event_datetime.isoformat(),
+                created_at=event.created_at.isoformat(),
+                updated_at=event.updated_at.isoformat(),
+            )
+            for event in events
+        ]
+
+        return CalendarEventsResponse(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+            events=event_responses,
+            total=len(event_responses),
+        )
+
+    except ValueError as e:
+        # Handle invalid date format
+        raise HTTPException(status_code=400, detail=f"Invalid date format: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error fetching events for user {user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/reminders/{user_id}/upcoming", response_model=RemindersResponse)
+async def get_upcoming_reminders(
+    user_id: str,
+    hours_ahead: int = Query(24, description="Number of hours to look ahead"),
+):
+    """
+    Get upcoming reminders for a user within the next X hours.
+
+    Args:
+        user_id: User identifier
+        hours_ahead: Number of hours to look ahead (default: 24)
+
+    Returns:
+        RemindersResponse with upcoming reminders
+    """
+    try:
+        # Fetch reminders from the database
+        reminders = await calendar_service.get_upcoming_reminders(
+            user_id=user_id, hours_ahead=hours_ahead
+        )
+
+        # Convert Reminder documents to response format
+        reminder_responses = [
+            ReminderResponse(
+                _id=str(reminder.id),
+                user_id=reminder.user_id,
+                title=reminder.title,
+                reminder_datetime=reminder.reminder_datetime.isoformat(),
+                priority=reminder.priority,
+                status=reminder.status,
+                event_id=reminder.event_id,
+                notes=reminder.notes,
+            )
+            for reminder in reminders
+        ]
+
+        return RemindersResponse(
+            user_id=user_id,
+            hours_ahead=hours_ahead,
+            reminders=reminder_responses,
+            total=len(reminder_responses),
+        )
+
+    except Exception as e:
+        logger.error(f"Error fetching reminders for user {user_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/messages/{user_id}", response_model=ChatHistoryResponse)
+async def get_chat_history(
+    user_id: str,
+    limit: int = Query(50, description="Maximum number of messages to return"),
+):
+    """
+    Get chat message history for a user.
+
+    Args:
+        user_id: User identifier
+        limit: Maximum number of messages to return (default: 50)
+
+    Returns:
+        ChatHistoryResponse with message history
+    """
+    try:
+        # Fetch messages from the database
+        messages = await conversation_service.get_recent_messages(
+            user_id=user_id, limit=limit
+        )
+
+        # Convert Message documents to response format
+        message_responses = [
+            MessageResponse(
+                _id=msg.id or "",
+                role=msg.role,
+                content=msg.content,
+                timestamp=msg.created_at.isoformat(),
+            )
+            for msg in messages
+        ]
+
+        return ChatHistoryResponse(
+            user_id=user_id, messages=message_responses, total=len(message_responses)
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Error fetching chat history for user {user_id}: {e}", exc_info=True
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.websocket("/ws/{user_id}")

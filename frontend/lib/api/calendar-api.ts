@@ -2,7 +2,7 @@
 import { CalendarEventsResponse, CalendarEvent } from '@/types';
 import { format, subDays, addDays } from 'date-fns';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL;
 
 export async function fetchEventsRange(
   userId: string,

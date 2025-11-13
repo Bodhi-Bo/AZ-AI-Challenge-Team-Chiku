@@ -10,9 +10,7 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def get_events(
-    user_id: str,
-    start_date: str,
-    end_date: Optional[str] = None
+    user_id: str, start_date: str, end_date: Optional[str] = None
 ) -> dict:
     """
     Get calendar events for a user within a date range.
@@ -42,25 +40,19 @@ async def get_events(
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
-            "description": event.description
+            "description": event.description,
         }
         for event in events
     ]
 
-    result = {
-        "success": True,
-        "count": len(events_list),
-        "events": events_list
-    }
+    result = {"success": True, "count": len(events_list), "events": events_list}
 
     logger.info(f"✓ Found {len(events_list)} event(s)")
     return result
 
 
 @tool
-async def get_events_on_date(
-    user_id: str, date: str
-) -> dict:
+async def get_events_on_date(user_id: str, date: str) -> dict:
     """
     Get all events for a specific date.
 
@@ -84,7 +76,7 @@ async def get_events_on_date(
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
-            "description": event.description
+            "description": event.description,
         }
         for event in events
     ]
@@ -93,7 +85,7 @@ async def get_events_on_date(
         "success": True,
         "date": date,
         "count": len(events_list),
-        "events": events_list
+        "events": events_list,
     }
 
     logger.info(f"✓ Found {len(events_list)} event(s) on {date}")
@@ -106,7 +98,7 @@ async def find_available_slots(
     date: str,
     duration_minutes: int,
     work_start_hour: int = 9,
-    work_end_hour: int = 17
+    work_end_hour: int = 17,
 ) -> dict:
     """
     Find available time slots on a given date that can fit an event of specified duration.
@@ -136,7 +128,7 @@ async def find_available_slots(
         "date": date,
         "duration_needed": duration_minutes,
         "available_slots": slots,
-        "count": len(slots)
+        "count": len(slots),
     }
 
     logger.info(f"✓ Found {len(slots)} available slot(s)")
@@ -145,10 +137,7 @@ async def find_available_slots(
 
 @tool
 async def check_time_availability(
-    user_id: str,
-    date: str,
-    start_time: str,
-    duration: int
+    user_id: str, date: str, start_time: str, duration: int
 ) -> dict:
     """
     Check if a specific time slot is available (no conflicts).
@@ -177,7 +166,7 @@ async def check_time_availability(
         "date": date,
         "start_time": start_time,
         "duration": duration,
-        "is_available": is_available
+        "is_available": is_available,
     }
 
     logger.info(f"✓ Time slot is {'available' if is_available else 'NOT available'}")
@@ -191,7 +180,7 @@ async def create_calendar_event(
     date: str,
     start_time: str,
     duration: int,
-    description: Optional[str] = None
+    description: Optional[str] = None,
 ) -> dict:
     """
     Create a new calendar event.
@@ -219,7 +208,7 @@ async def create_calendar_event(
         date=date,
         start_time=start_time,
         duration=duration,
-        description=description
+        description=description,
     )
 
     result = {
@@ -229,7 +218,7 @@ async def create_calendar_event(
         "date": event.date,
         "start_time": event.start_time,
         "duration": event.duration,
-        "description": event.description
+        "description": event.description,
     }
 
     logger.info(f"✓ Event created: {event.title} on {event.date} at {event.start_time}")
@@ -244,7 +233,7 @@ async def update_calendar_event(
     date: Optional[str] = None,
     start_time: Optional[str] = None,
     duration: Optional[int] = None,
-    description: Optional[str] = None
+    description: Optional[str] = None,
 ) -> dict:
     """
     Update an existing calendar event. Only provided fields will be updated.
@@ -284,15 +273,12 @@ async def update_calendar_event(
         date=date,
         start_time=start_time,
         duration=duration,
-        description=description
+        description=description,
     )
 
     if not event:
         logger.warning(f"✗ Event not found: {event_id}")
-        return {
-            "success": False,
-            "error": f"Event {event_id} not found"
-        }
+        return {"success": False, "error": f"Event {event_id} not found"}
 
     result = {
         "success": True,
@@ -301,7 +287,7 @@ async def update_calendar_event(
         "date": event.date,
         "start_time": event.start_time,
         "duration": event.duration,
-        "description": event.description
+        "description": event.description,
     }
 
     logger.info(f"✓ Event updated: {event.title}")
@@ -310,10 +296,7 @@ async def update_calendar_event(
 
 @tool
 async def move_event_to_date(
-    user_id: str,
-    event_id: str,
-    new_date: str,
-    new_start_time: Optional[str] = None
+    user_id: str, event_id: str, new_date: str, new_start_time: Optional[str] = None
 ) -> dict:
     """
     Move an event to a different date, optionally changing the time.
@@ -347,15 +330,12 @@ async def move_event_to_date(
         user_id=user_id,
         event_id=event_id,
         date=new_date,
-        start_time=new_start_time if new_start_time else None
+        start_time=new_start_time if new_start_time else None,
     )
 
     if not event:
         logger.warning(f"✗ Event not found: {event_id}")
-        return {
-            "success": False,
-            "error": f"Event {event_id} not found"
-        }
+        return {"success": False, "error": f"Event {event_id} not found"}
 
     result = {
         "success": True,
@@ -364,7 +344,7 @@ async def move_event_to_date(
         "old_date": "moved",
         "new_date": event.date,
         "start_time": event.start_time,
-        "duration": event.duration
+        "duration": event.duration,
     }
 
     logger.info(f"✓ Event moved: {event.title} → {event.date} at {event.start_time}")
@@ -372,9 +352,7 @@ async def move_event_to_date(
 
 
 @tool
-async def delete_calendar_event(
-    user_id: str, event_id: str
-) -> dict:
+async def delete_calendar_event(user_id: str, event_id: str) -> dict:
     """
     Delete a calendar event.
 
@@ -402,25 +380,16 @@ async def delete_calendar_event(
 
     if not success:
         logger.warning(f"✗ Event not found: {event_id}")
-        return {
-            "success": False,
-            "error": f"Event {event_id} not found"
-        }
+        return {"success": False, "error": f"Event {event_id} not found"}
 
-    result = {
-        "success": True,
-        "event_id": event_id,
-        "message": "Event deleted"
-    }
+    result = {"success": True, "event_id": event_id, "message": "Event deleted"}
 
     logger.info(f"✓ Event deleted: {event_id}")
     return result
 
 
 @tool
-async def get_todays_schedule(
-    user_id: str
-) -> dict:
+async def get_todays_schedule(user_id: str) -> dict:
     """
     Get today's schedule for the user.
 
@@ -435,18 +404,11 @@ async def get_todays_schedule(
     logger.info("TOOL: get_todays_schedule")
     logger.info(f"Parameters: user_id={user_id}, today={today}")
 
-    return await get_events_on_date.ainvoke(
-        {
-            "user_id": user_id,
-            "date": today
-        }
-    )
+    return await get_events_on_date.ainvoke({"user_id": user_id, "date": today})
 
 
 @tool
-async def get_tomorrows_schedule(
-    user_id: str
-) -> dict:
+async def get_tomorrows_schedule(user_id: str) -> dict:
     """
     Get tomorrow's schedule for the user.
 
@@ -461,18 +423,11 @@ async def get_tomorrows_schedule(
     logger.info("TOOL: get_tomorrows_schedule")
     logger.info(f"Parameters: user_id={user_id}, tomorrow={tomorrow}")
 
-    return await get_events_on_date.ainvoke(
-        {
-            "user_id": user_id,
-            "date": tomorrow
-        }
-    )
+    return await get_events_on_date.ainvoke({"user_id": user_id, "date": tomorrow})
 
 
 @tool
-async def get_week_schedule(
-    user_id: str
-) -> dict:
+async def get_week_schedule(user_id: str) -> dict:
     """
     Get this week's schedule (next 7 days).
 
@@ -490,19 +445,13 @@ async def get_week_schedule(
     logger.info(f"Parameters: user_id={user_id}, range={start_date} to {end_date}")
 
     return await get_events.ainvoke(
-        {
-            "user_id": user_id,
-            "start_date": start_date,
-            "end_date": end_date
-        }
+        {"user_id": user_id, "start_date": start_date, "end_date": end_date}
     )
 
 
 @tool
 async def find_event_by_title(
-    user_id: str,
-    title_query: str,
-    date: Optional[str] = None
+    user_id: str, title_query: str, date: Optional[str] = None
 ) -> dict:
     """
     Search for events by title (case-insensitive partial match).
@@ -557,7 +506,7 @@ async def find_event_by_title(
             "date": event.date,
             "start_time": event.start_time,
             "duration": event.duration,
-            "description": event.description
+            "description": event.description,
         }
         for event in matching_events
     ]
@@ -566,7 +515,7 @@ async def find_event_by_title(
         "success": True,
         "query": title_query,
         "count": len(events_list),
-        "events": events_list
+        "events": events_list,
     }
 
     if len(events_list) == 0:
@@ -587,7 +536,7 @@ async def create_reminder(
     reminder_datetime: str,
     priority: str = "normal",
     recurrence: Optional[str] = None,
-    notes: Optional[str] = None
+    notes: Optional[str] = None,
 ) -> dict:
     """
     Create a standalone reminder (not linked to any event).
@@ -615,7 +564,7 @@ async def create_reminder(
         reminder_datetime=reminder_datetime,
         priority=priority,
         recurrence=recurrence,
-        notes=notes
+        notes=notes,
     )
 
     result = {
@@ -624,7 +573,7 @@ async def create_reminder(
         "title": reminder.title,
         "reminder_datetime": reminder.reminder_datetime,
         "priority": reminder.priority,
-        "status": reminder.status
+        "status": reminder.status,
     }
 
     logger.info(f"✓ Reminder created: {reminder.title} at {reminder.reminder_datetime}")
@@ -637,7 +586,7 @@ async def create_reminder_for_event(
     event_id: str,
     minutes_before: int,
     title: Optional[str] = None,
-    priority: str = "normal"
+    priority: str = "normal",
 ) -> dict:
     """
     Create a reminder X minutes before a calendar event.
@@ -665,15 +614,12 @@ async def create_reminder_for_event(
         event_id=event_id,
         minutes_before=minutes_before,
         title=title,
-        priority=priority
+        priority=priority,
     )
 
     if not reminder:
         logger.warning(f"✗ Event not found: {event_id}")
-        return {
-            "success": False,
-            "error": f"Event {event_id} not found"
-        }
+        return {"success": False, "error": f"Event {event_id} not found"}
 
     result = {
         "success": True,
@@ -682,7 +628,7 @@ async def create_reminder_for_event(
         "reminder_datetime": reminder.reminder_datetime,
         "event_id": reminder.event_id,
         "minutes_before_event": reminder.minutes_before_event,
-        "priority": reminder.priority
+        "priority": reminder.priority,
     }
 
     logger.info(f"✓ Event reminder created: {minutes_before} min before event")
@@ -690,9 +636,7 @@ async def create_reminder_for_event(
 
 
 @tool
-async def get_upcoming_reminders(
-    user_id: str, hours_ahead: int = 24
-) -> dict:
+async def get_upcoming_reminders(user_id: str, hours_ahead: int = 24) -> dict:
     """
     Get upcoming reminders within the next X hours.
 
@@ -716,7 +660,7 @@ async def get_upcoming_reminders(
             "reminder_datetime": reminder.reminder_datetime,
             "event_id": reminder.event_id,
             "priority": reminder.priority,
-            "status": reminder.status
+            "status": reminder.status,
         }
         for reminder in reminders
     ]
@@ -724,7 +668,7 @@ async def get_upcoming_reminders(
     result = {
         "success": True,
         "count": len(reminders_list),
-        "reminders": reminders_list
+        "reminders": reminders_list,
     }
 
     logger.info(f"✓ Found {len(reminders_list)} upcoming reminder(s)")
@@ -732,9 +676,7 @@ async def get_upcoming_reminders(
 
 
 @tool
-async def get_pending_reminders(
-    user_id: str
-) -> dict:
+async def get_pending_reminders(user_id: str) -> dict:
     """
     Get all pending reminders for the user.
 
@@ -756,7 +698,7 @@ async def get_pending_reminders(
             "title": reminder.title,
             "reminder_datetime": reminder.reminder_datetime,
             "event_id": reminder.event_id,
-            "priority": reminder.priority
+            "priority": reminder.priority,
         }
         for reminder in reminders
     ]
@@ -764,7 +706,7 @@ async def get_pending_reminders(
     result = {
         "success": True,
         "count": len(reminders_list),
-        "reminders": reminders_list
+        "reminders": reminders_list,
     }
 
     logger.info(f"✓ Found {len(reminders_list)} pending reminder(s)")
@@ -772,9 +714,7 @@ async def get_pending_reminders(
 
 
 @tool
-async def mark_reminder_completed(
-    user_id: str, reminder_id: str
-) -> dict:
+async def mark_reminder_completed(user_id: str, reminder_id: str) -> dict:
     """
     Mark a reminder as completed.
 
@@ -793,27 +733,16 @@ async def mark_reminder_completed(
 
     if not success:
         logger.warning(f"✗ Reminder not found: {reminder_id}")
-        return {
-            "success": False,
-            "error": f"Reminder {reminder_id} not found"
-        }
+        return {"success": False, "error": f"Reminder {reminder_id} not found"}
 
-    result = {
-        "success": True,
-        "reminder_id": reminder_id,
-        "status": "completed"
-    }
+    result = {"success": True, "reminder_id": reminder_id, "status": "completed"}
 
     logger.info(f"✓ Reminder marked completed: {reminder_id}")
     return result
 
 
 @tool
-async def snooze_reminder(
-    user_id: str,
-    reminder_id: str,
-    snooze_minutes: int
-) -> dict:
+async def snooze_reminder(user_id: str, reminder_id: str, snooze_minutes: int) -> dict:
     """
     Snooze a reminder by X minutes.
 
@@ -835,17 +764,14 @@ async def snooze_reminder(
 
     if not reminder:
         logger.warning(f"✗ Reminder not found: {reminder_id}")
-        return {
-            "success": False,
-            "error": f"Reminder {reminder_id} not found"
-        }
+        return {"success": False, "error": f"Reminder {reminder_id} not found"}
 
     result = {
         "success": True,
         "reminder_id": reminder.id,
         "title": reminder.title,
         "new_reminder_datetime": reminder.reminder_datetime,
-        "status": reminder.status
+        "status": reminder.status,
     }
 
     logger.info(
@@ -855,9 +781,7 @@ async def snooze_reminder(
 
 
 @tool
-async def delete_reminder(
-    user_id: str, reminder_id: str
-) -> dict:
+async def delete_reminder(user_id: str, reminder_id: str) -> dict:
     """
     Delete a reminder.
 
@@ -876,15 +800,12 @@ async def delete_reminder(
 
     if not success:
         logger.warning(f"✗ Reminder not found: {reminder_id}")
-        return {
-            "success": False,
-            "error": f"Reminder {reminder_id} not found"
-        }
+        return {"success": False, "error": f"Reminder {reminder_id} not found"}
 
     result = {
         "success": True,
         "reminder_id": reminder_id,
-        "message": "Reminder deleted"
+        "message": "Reminder deleted",
     }
 
     logger.info(f"✓ Reminder deleted: {reminder_id}")
