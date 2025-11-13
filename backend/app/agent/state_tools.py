@@ -6,15 +6,14 @@ from langchain_core.tools import tool
 import logging
 from typing import Dict, Any
 from app.services.conversation_service import conversation_service
+from app.agent.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
 @tool
-async def update_working_state(
-    user_id: str, state_dict: Dict[str, Any]
-) -> Dict[str, Any]:
+async def update_working_state(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Update your internal working state based on conversation history and tool results.
 
@@ -40,12 +39,12 @@ async def update_working_state(
     Examples: emotional_trajectory, conversation_phase, user_patterns, etc.
 
     Args:
-        user_id: The user's ID
         state_dict: Your updated working state with insights from last iteration
 
     Returns:
         dict: Confirmation of state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: update_working_state")
     logger.info(f"User ID: {user_id}")
@@ -82,9 +81,7 @@ async def update_working_state(
 
 
 @tool
-async def update_user_profile(
-    user_id: str, profile_updates: Dict[str, Any]
-) -> Dict[str, Any]:
+async def update_user_profile(profile_updates: Dict[str, Any]) -> Dict[str, Any]:
     """
     Update the persistent user profile with learnings from the conversation.
 
@@ -105,12 +102,12 @@ async def update_user_profile(
     This profile persists across conversations and helps you provide better support.
 
     Args:
-        user_id: The user's ID
         profile_updates: Dictionary of profile fields to update (merges with existing profile)
 
     Returns:
         dict: Confirmation of profile update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: update_user_profile")
     logger.info(f"User ID: {user_id}")

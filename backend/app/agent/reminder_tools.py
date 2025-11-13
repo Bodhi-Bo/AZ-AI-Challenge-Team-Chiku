@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 import logging
 from typing import Optional
 from app.services.mongo_calendar_service import calendar_service
+from app.agent.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -13,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def create_reminder(
-    user_id: str,
     title: str,
     reminder_datetime: str,
     priority: str = "normal",
@@ -24,7 +24,6 @@ async def create_reminder(
     Create a standalone reminder (not linked to any event).
 
     Args:
-        user_id: The user's ID
         title: Reminder title
         reminder_datetime: When to remind in ISO format (YYYY-MM-DDTHH:MM:SS)
         priority: Priority level (low, normal, high) - default normal
@@ -34,6 +33,7 @@ async def create_reminder(
     Returns:
         dict: Created reminder details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_reminder")
     logger.info(
@@ -64,7 +64,6 @@ async def create_reminder(
 
 @tool
 async def create_reminder_for_event(
-    user_id: str,
     event_id: str,
     minutes_before: int,
     title: Optional[str] = None,
@@ -78,7 +77,6 @@ async def create_reminder_for_event(
     DO NOT use event titles or made-up identifiers as event_id.
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         minutes_before: How many minutes before event to remind
         title: Custom reminder title (optional, defaults to "Reminder: {event_title}")
@@ -87,6 +85,7 @@ async def create_reminder_for_event(
     Returns:
         dict: Created reminder details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_reminder_for_event")
     logger.info(f"Parameters: event_id={event_id}, minutes_before={minutes_before}")
@@ -118,17 +117,17 @@ async def create_reminder_for_event(
 
 
 @tool
-async def get_upcoming_reminders(user_id: str, hours_ahead: int = 24) -> dict:
+async def get_upcoming_reminders(hours_ahead: int = 24) -> dict:
     """
     Get upcoming reminders within the next X hours.
 
     Args:
-        user_id: The user's ID
         hours_ahead: How many hours ahead to look (default 24)
 
     Returns:
         dict: List of upcoming reminders
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_upcoming_reminders")
     logger.info(f"Parameters: user_id={user_id}, hours_ahead={hours_ahead}")
@@ -159,16 +158,14 @@ async def get_upcoming_reminders(user_id: str, hours_ahead: int = 24) -> dict:
 
 
 @tool
-async def get_pending_reminders(user_id: str) -> dict:
+async def get_pending_reminders() -> dict:
     """
     Get all pending (not completed/dismissed) reminders.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: List of pending reminders
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_pending_reminders")
     logger.info(f"Parameters: user_id={user_id}")
@@ -198,17 +195,17 @@ async def get_pending_reminders(user_id: str) -> dict:
 
 
 @tool
-async def mark_reminder_completed(user_id: str, reminder_id: str) -> dict:
+async def mark_reminder_completed(reminder_id: str) -> dict:
     """
     Mark a reminder as completed.
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to mark completed
 
     Returns:
         dict: Success status
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: mark_reminder_completed")
     logger.info(f"Parameters: user_id={user_id}, reminder_id={reminder_id}")
@@ -226,18 +223,18 @@ async def mark_reminder_completed(user_id: str, reminder_id: str) -> dict:
 
 
 @tool
-async def snooze_reminder(user_id: str, reminder_id: str, snooze_minutes: int) -> dict:
+async def snooze_reminder(reminder_id: str, snooze_minutes: int) -> dict:
     """
     Snooze a reminder by X minutes (delays the reminder time).
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to snooze
         snooze_minutes: How many minutes to snooze for
 
     Returns:
         dict: Updated reminder details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: snooze_reminder")
     logger.info(
@@ -265,17 +262,17 @@ async def snooze_reminder(user_id: str, reminder_id: str, snooze_minutes: int) -
 
 
 @tool
-async def delete_reminder(user_id: str, reminder_id: str) -> dict:
+async def delete_reminder(reminder_id: str) -> dict:
     """
     Delete a reminder.
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to delete
 
     Returns:
         dict: Success status
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: delete_reminder")
     logger.info(f"Parameters: user_id={user_id}, reminder_id={reminder_id}")

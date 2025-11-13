@@ -2,6 +2,7 @@ from langchain_core.tools import tool
 import logging
 from typing import Optional, List
 from app.services.mongo_calendar_service import calendar_service
+from app.agent.tool_context import get_current_user_id
 from datetime import datetime, timedelta
 
 # Configure logging
@@ -9,20 +10,18 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def get_events(
-    user_id: str, start_date: str, end_date: Optional[str] = None
-) -> dict:
+async def get_events(start_date: str, end_date: Optional[str] = None) -> dict:
     """
     Get calendar events for a user within a date range.
 
     Args:
-        user_id: The user's ID
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format (optional, defaults to start_date)
 
     Returns:
         dict: List of events with their details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_events")
     logger.info(
@@ -52,17 +51,17 @@ async def get_events(
 
 
 @tool
-async def get_events_on_date(user_id: str, date: str) -> dict:
+async def get_events_on_date(date: str) -> dict:
     """
     Get all events for a specific date.
 
     Args:
-        user_id: The user's ID
         date: Date in YYYY-MM-DD format
 
     Returns:
         dict: List of events for that date and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_events_on_date")
     logger.info(f"Parameters: user_id={user_id}, date={date}")
@@ -94,7 +93,6 @@ async def get_events_on_date(user_id: str, date: str) -> dict:
 
 @tool
 async def find_available_slots(
-    user_id: str,
     date: str,
     duration_minutes: int,
     work_start_hour: int = 9,
@@ -104,7 +102,6 @@ async def find_available_slots(
     Find available time slots on a given date that can fit an event of specified duration.
 
     Args:
-        user_id: The user's ID
         date: Date to check in YYYY-MM-DD format
         duration_minutes: Required duration in minutes
         work_start_hour: Start of work day (default 9am)
@@ -113,6 +110,7 @@ async def find_available_slots(
     Returns:
         dict: List of available time slots and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: find_available_slots")
     logger.info(
@@ -136,14 +134,11 @@ async def find_available_slots(
 
 
 @tool
-async def check_time_availability(
-    user_id: str, date: str, start_time: str, duration: int
-) -> dict:
+async def check_time_availability(date: str, start_time: str, duration: int) -> dict:
     """
     Check if a specific time slot is available (no conflicts).
 
     Args:
-        user_id: The user's ID
         date: Date in YYYY-MM-DD format
         start_time: Start time in HH:MM format
         duration: Duration in minutes
@@ -151,6 +146,7 @@ async def check_time_availability(
     Returns:
         dict: Whether the time is available and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: check_time_availability")
     logger.info(
@@ -175,7 +171,6 @@ async def check_time_availability(
 
 @tool
 async def create_calendar_event(
-    user_id: str,
     title: str,
     date: str,
     start_time: str,
@@ -186,7 +181,6 @@ async def create_calendar_event(
     Create a new calendar event.
 
     Args:
-        user_id: The user's ID
         title: Event title
         date: Event date in YYYY-MM-DD format
         start_time: Event start time in HH:MM format
@@ -196,6 +190,7 @@ async def create_calendar_event(
     Returns:
         dict: Created event details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_calendar_event")
     logger.info(
@@ -227,7 +222,6 @@ async def create_calendar_event(
 
 @tool
 async def update_calendar_event(
-    user_id: str,
     event_id: str,
     title: Optional[str] = None,
     date: Optional[str] = None,
@@ -248,7 +242,6 @@ async def update_calendar_event(
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         title: New event title (optional)
         date: New event date in YYYY-MM-DD format (optional)
@@ -259,6 +252,7 @@ async def update_calendar_event(
     Returns:
         dict: Updated event details or error and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: update_calendar_event")
     logger.info(f"Parameters: user_id={user_id}, event_id={event_id}")
@@ -296,7 +290,7 @@ async def update_calendar_event(
 
 @tool
 async def move_event_to_date(
-    user_id: str, event_id: str, new_date: str, new_start_time: Optional[str] = None
+    event_id: str, new_date: str, new_start_time: Optional[str] = None
 ) -> dict:
     """
     Move an event to a different date, optionally changing the time.
@@ -312,7 +306,6 @@ async def move_event_to_date(
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         new_date: New date in YYYY-MM-DD format
         new_start_time: New start time in HH:MM format (optional, keeps original time if not provided)
@@ -320,6 +313,7 @@ async def move_event_to_date(
     Returns:
         dict: Updated event details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: move_event_to_date")
     logger.info(
@@ -352,7 +346,7 @@ async def move_event_to_date(
 
 
 @tool
-async def delete_calendar_event(user_id: str, event_id: str) -> dict:
+async def delete_calendar_event(event_id: str) -> dict:
     """
     Delete a calendar event.
 
@@ -366,12 +360,12 @@ async def delete_calendar_event(user_id: str, event_id: str) -> dict:
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
 
     Returns:
         dict: Success status and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: delete_calendar_event")
     logger.info(f"Parameters: user_id={user_id}, event_id={event_id}")
@@ -389,54 +383,48 @@ async def delete_calendar_event(user_id: str, event_id: str) -> dict:
 
 
 @tool
-async def get_todays_schedule(user_id: str) -> dict:
+async def get_todays_schedule() -> dict:
     """
     Get today's schedule for the user.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: Today's events and state update
     """
+    user_id = get_current_user_id()
     today = datetime.now().strftime("%Y-%m-%d")
     logger.info("=" * 60)
     logger.info("TOOL: get_todays_schedule")
     logger.info(f"Parameters: user_id={user_id}, today={today}")
 
-    return await get_events_on_date.ainvoke({"user_id": user_id, "date": today})
+    return await get_events_on_date.ainvoke({"date": today})
 
 
 @tool
-async def get_tomorrows_schedule(user_id: str) -> dict:
+async def get_tomorrows_schedule() -> dict:
     """
     Get tomorrow's schedule for the user.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: Tomorrow's events and state update
     """
+    user_id = get_current_user_id()
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     logger.info("=" * 60)
     logger.info("TOOL: get_tomorrows_schedule")
     logger.info(f"Parameters: user_id={user_id}, tomorrow={tomorrow}")
 
-    return await get_events_on_date.ainvoke({"user_id": user_id, "date": tomorrow})
+    return await get_events_on_date.ainvoke({"date": tomorrow})
 
 
 @tool
-async def get_week_schedule(user_id: str) -> dict:
+async def get_week_schedule() -> dict:
     """
     Get this week's schedule (next 7 days).
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: This week's events and state update
     """
+    user_id = get_current_user_id()
     start_date = datetime.now().strftime("%Y-%m-%d")
     end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
@@ -444,15 +432,11 @@ async def get_week_schedule(user_id: str) -> dict:
     logger.info("TOOL: get_week_schedule")
     logger.info(f"Parameters: user_id={user_id}, range={start_date} to {end_date}")
 
-    return await get_events.ainvoke(
-        {"user_id": user_id, "start_date": start_date, "end_date": end_date}
-    )
+    return await get_events.ainvoke({"start_date": start_date, "end_date": end_date})
 
 
 @tool
-async def find_event_by_title(
-    user_id: str, title_query: str, date: Optional[str] = None
-) -> dict:
+async def find_event_by_title(title_query: str, date: Optional[str] = None) -> dict:
     """
     Search for events by title (case-insensitive partial match).
 
@@ -463,7 +447,6 @@ async def find_event_by_title(
     move_event_to_date, or delete_calendar_event.
 
     Args:
-        user_id: The user's ID
         title_query: Title or partial title to search for (case-insensitive)
         date: Optional date to narrow search (YYYY-MM-DD format). If not provided, searches all dates.
 
@@ -472,10 +455,11 @@ async def find_event_by_title(
 
     Example:
         User says "move my yoga session to tomorrow"
-        1. Call find_event_by_title(user_id="user_123", title_query="yoga")
+        1. Call find_event_by_title(title_query="yoga")
         2. Get back event_id "691317c99da9a2b1525f35c9"
-        3. Call move_event_to_date(user_id="user_123", event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
+        3. Call move_event_to_date(event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: find_event_by_title")
     logger.info(
@@ -531,7 +515,6 @@ async def find_event_by_title(
 
 @tool
 async def create_reminder(
-    user_id: str,
     title: str,
     reminder_datetime: str,
     priority: str = "normal",
@@ -542,7 +525,6 @@ async def create_reminder(
     Create a standalone reminder (not linked to any event).
 
     Args:
-        user_id: The user's ID
         title: Reminder title
         reminder_datetime: When to remind in ISO format (YYYY-MM-DDTHH:MM:SS)
         priority: Priority level (low, normal, high) - default normal
@@ -552,6 +534,7 @@ async def create_reminder(
     Returns:
         dict: Created reminder details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_reminder")
     logger.info(
@@ -582,7 +565,6 @@ async def create_reminder(
 
 @tool
 async def create_reminder_for_event(
-    user_id: str,
     event_id: str,
     minutes_before: int,
     title: Optional[str] = None,
@@ -596,7 +578,6 @@ async def create_reminder_for_event(
     DO NOT use event titles or made-up identifiers as event_id.
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         minutes_before: How many minutes before event to remind
         title: Custom reminder title (optional, defaults to "Reminder: {event_title}")
@@ -605,6 +586,7 @@ async def create_reminder_for_event(
     Returns:
         dict: Created reminder details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_reminder_for_event")
     logger.info(f"Parameters: event_id={event_id}, minutes_before={minutes_before}")
@@ -636,17 +618,17 @@ async def create_reminder_for_event(
 
 
 @tool
-async def get_upcoming_reminders(user_id: str, hours_ahead: int = 24) -> dict:
+async def get_upcoming_reminders(hours_ahead: int = 24) -> dict:
     """
     Get upcoming reminders within the next X hours.
 
     Args:
-        user_id: The user's ID
         hours_ahead: How many hours ahead to look (default 24)
 
     Returns:
         dict: List of upcoming reminders and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_upcoming_reminders")
     logger.info(f"Parameters: user_id={user_id}, hours_ahead={hours_ahead}")
@@ -676,16 +658,14 @@ async def get_upcoming_reminders(user_id: str, hours_ahead: int = 24) -> dict:
 
 
 @tool
-async def get_pending_reminders(user_id: str) -> dict:
+async def get_pending_reminders() -> dict:
     """
     Get all pending reminders for the user.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: List of pending reminders and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_pending_reminders")
     logger.info(f"Parameters: user_id={user_id}")
@@ -714,17 +694,17 @@ async def get_pending_reminders(user_id: str) -> dict:
 
 
 @tool
-async def mark_reminder_completed(user_id: str, reminder_id: str) -> dict:
+async def mark_reminder_completed(reminder_id: str) -> dict:
     """
     Mark a reminder as completed.
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to complete
 
     Returns:
         dict: Success status and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: mark_reminder_completed")
     logger.info(f"Parameters: user_id={user_id}, reminder_id={reminder_id}")
@@ -742,18 +722,18 @@ async def mark_reminder_completed(user_id: str, reminder_id: str) -> dict:
 
 
 @tool
-async def snooze_reminder(user_id: str, reminder_id: str, snooze_minutes: int) -> dict:
+async def snooze_reminder(reminder_id: str, snooze_minutes: int) -> dict:
     """
     Snooze a reminder by X minutes.
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to snooze
         snooze_minutes: How many minutes to snooze
 
     Returns:
         dict: Updated reminder details and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: snooze_reminder")
     logger.info(f"Parameters: reminder_id={reminder_id}, snooze={snooze_minutes} min")
@@ -781,17 +761,17 @@ async def snooze_reminder(user_id: str, reminder_id: str, snooze_minutes: int) -
 
 
 @tool
-async def delete_reminder(user_id: str, reminder_id: str) -> dict:
+async def delete_reminder(reminder_id: str) -> dict:
     """
     Delete a reminder.
 
     Args:
-        user_id: The user's ID
         reminder_id: The reminder ID to delete
 
     Returns:
         dict: Success status and state update
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: delete_reminder")
     logger.info(f"Parameters: user_id={user_id}, reminder_id={reminder_id}")

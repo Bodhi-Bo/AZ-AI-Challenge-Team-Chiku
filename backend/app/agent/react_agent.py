@@ -34,8 +34,12 @@ from app.agent.message_tools import (
     send_interrogative_message,
     send_declarative_message,
 )
-from app.agent.tools import (
+from app.agent.state_tools import (
     update_working_state,
+)
+from app.agent.tool_context import (
+    set_current_user_id,
+    reset_current_user_id,
 )
 from app.services.conversation_service import conversation_service
 from app.services.openai_llmpool_service import llmpool
@@ -217,223 +221,225 @@ class ReactCalendarAgent:
             HumanMessage(content=user_message),
         ]
 
-        # ReAct loop - iterate until a message tool is called
-        max_iterations = 10
-        iteration = 0
-        final_response = None
+        # Set the user_id context for all tool executions
+        context_token = set_current_user_id(self.user_id)
 
-        while iteration < max_iterations:
-            iteration += 1
-            logger.info(f"\n--- Iteration {iteration} ---")
+        try:
+            # ReAct loop - iterate until a message tool is called
+            max_iterations = 10
+            iteration = 0
+            final_response = None
 
-            # Calculate tokens needed for this request
-            tokens_needed = num_tokens_from_messages(messages, model_name=OPENAI_MODEL)
-            tokens_needed += 5000  # Buffer for response
+            while iteration < max_iterations:
+                iteration += 1
+                logger.info(f"\n--- Iteration {iteration} ---")
 
-            logger.debug(f"Estimated tokens needed: {tokens_needed}")
-
-            # Borrow LLM from pool
-            try:
-                slot, lock_token = await llmpool.borrow_llm(tokens_needed)
-                llm_with_tools = slot.llm.bind_tools(self.tools)
-
-                logger.debug(
-                    f"Borrowed LLM slot '{slot.name}' for iteration {iteration}"
+                # Calculate tokens needed for this request
+                tokens_needed = num_tokens_from_messages(
+                    messages, model_name=OPENAI_MODEL
                 )
+                tokens_needed += 5000  # Buffer for response
 
-                # Call LLM with tools
-                response = llm_with_tools.invoke(messages)
+                logger.debug(f"Estimated tokens needed: {tokens_needed}")
 
-                # Extract actual token usage
-                actual_tokens = tokens_needed
-                if hasattr(response, "response_metadata"):
-                    usage = response.response_metadata.get("token_usage", {})
-                    if usage:
-                        actual_tokens = usage.get("prompt_tokens", 0) + usage.get(
-                            "completion_tokens", 0
-                        )
-                        logger.debug(f"Actual tokens used: {actual_tokens}")
+                # Borrow LLM from pool
+                try:
+                    slot, lock_token = await llmpool.borrow_llm(tokens_needed)
+                    llm_with_tools = slot.llm.bind_tools(self.tools)
 
-                # Record usage and return the slot
-                llmpool.record_slot_usage(slot, actual_tokens)
-                llmpool.return_llm(slot, lock_token)
-
-            except ValueError as e:
-                logger.error(f"Error using LLM slot: {e}")
-                final_response = "I'm experiencing high demand right now. Please try again in a moment."
-                await conversation_service.save_message(
-                    self.user_id, "assistant", final_response
-                )
-                return final_response
-            except Exception as e:
-                logger.error(f"Unexpected error in chat: {e}", exc_info=True)
-                final_response = (
-                    "I apologize, but I encountered an error. Please try again."
-                )
-                await conversation_service.save_message(
-                    self.user_id, "assistant", final_response
-                )
-                return final_response
-
-            messages.append(response)
-
-            # Check if LLM called any tools
-            if not response.tool_calls:
-                # No tools called - LLM provided reasoning/response directly (ERROR STATE)
-                content = str(response.content) if response.content else ""
-                logger.warning(
-                    f"LLM responded without tool calls. This violates the protocol. Content: {content}"
-                )
-
-                # Force it to call at least the message tool
-                final_response = (
-                    content or "I apologize, I need to reconsider my approach."
-                )
-                await conversation_service.save_message(
-                    self.user_id, "assistant", final_response
-                )
-                break
-
-            # VALIDATION: Check minimum 2 tool calls (state + action)
-            if len(response.tool_calls) < 2:
-                logger.error(
-                    f"Protocol violation: Only {len(response.tool_calls)} tool call(s). Minimum is 2 (state + action)"
-                )
-                # Let it proceed but log the violation - the LLM might self-correct next iteration
-
-            # VALIDATION: Check that first tool call is update_working_state
-            first_tool_name = response.tool_calls[0]["name"]
-            if first_tool_name != "update_working_state":
-                logger.error(
-                    f"Protocol violation: First tool call must be update_working_state, got {first_tool_name}"
-                )
-                # Continue anyway - might self-correct
-
-            logger.info(f"Tool calls requested: {len(response.tool_calls)}")
-
-            # Track tool calls for next iteration's prompt
-            tool_calls_record = []
-            state_update_found = False
-
-            # Prepare all tool call coroutines for parallel execution
-            tool_coroutines = []
-            tool_metadata = []  # Track metadata for each coroutine
-
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-
-                logger.info(f"\nPreparing tool: {tool_name}")
-                logger.info(f"Arguments: {tool_args}")
-
-                # Always override user_id for all non-message and non-state tools
-                # This ensures the correct user_id is used regardless of what the LLM passes
-                if tool_name not in [
-                    "send_interrogative_message",
-                    "send_declarative_message",
-                    "update_working_state",
-                ]:
-                    # Override user_id even if LLM provided one (to fix user_id mismatches)
-                    if "user_id" in tool_args and tool_args["user_id"] != self.user_id:
-                        logger.debug(
-                            f"Overriding user_id from '{tool_args['user_id']}' to '{self.user_id}'"
-                        )
-                    tool_args["user_id"] = self.user_id
-
-                # Create coroutine for this tool
-                tool_coroutines.append(self._execute_tool(tool_name, tool_args))
-                tool_metadata.append(
-                    {
-                        "tool_name": tool_name,
-                        "tool_args": tool_args,
-                        "tool_call_id": tool_call["id"],
-                    }
-                )
-
-            # Execute ALL tools in parallel
-            logger.info(
-                f"Executing {len(tool_coroutines)} tools in parallel using asyncio.gather..."
-            )
-            tool_results = await asyncio.gather(*tool_coroutines)
-
-            # Process results
-            for i, tool_result in enumerate(tool_results):
-                meta = tool_metadata[i]
-                tool_name = meta["tool_name"]
-                tool_args = meta["tool_args"]
-                tool_call_id = meta["tool_call_id"]
-
-                logger.info(f"\n✓ Tool completed: {tool_name}")
-                logger.info(f"Result: {tool_result}")
-
-                # Track this tool call for next iteration
-                tool_calls_record.append(
-                    {"tool_name": tool_name, "args": tool_args, "result": tool_result}
-                )
-
-                # Handle state update tool specially
-                if tool_name == "update_working_state":
-                    state_update_found = True
-                    if isinstance(tool_result, dict) and tool_result.get("success"):
-                        state_dict = tool_result.get("state_dict", {})
-                        if state_dict:
-                            # Update conversation state with the new state
-                            conversation_service.update_conversation_state(
-                                self.user_id, state_dict
-                            )
-                            logger.info(
-                                f"✓ Conversation state updated from update_working_state tool"
-                            )
-
-                # Add tool result to messages
-                messages.append(
-                    ToolMessage(
-                        content=str(tool_result),
-                        tool_call_id=tool_call_id,
-                    )
-                )
-
-                # Check if this is a message tool (end of iteration)
-                if isinstance(tool_result, dict) and "message_type" in tool_result:
-                    final_response = tool_result.get("content", "")
-                    logger.info(f"Message tool detected: {tool_name}")
-                    logger.info(f"CHIKU: {final_response}")
-
-                    # Save tool calls record to state for next iteration
-                    conversation_service.update_conversation_state(
-                        self.user_id, {"last_tool_calls": tool_calls_record}
+                    logger.debug(
+                        f"Borrowed LLM slot '{slot.name}' for iteration {iteration}"
                     )
 
-                    # Send message via callback if available
-                    if self.message_callback:
-                        self.message_callback(final_response)
+                    # Call LLM with tools
+                    response = llm_with_tools.invoke(messages)
 
-                    # Save assistant message to history
+                    # Extract actual token usage
+                    actual_tokens = tokens_needed
+                    if hasattr(response, "response_metadata"):
+                        usage = response.response_metadata.get("token_usage", {})
+                        if usage:
+                            actual_tokens = usage.get("prompt_tokens", 0) + usage.get(
+                                "completion_tokens", 0
+                            )
+                            logger.debug(f"Actual tokens used: {actual_tokens}")
+
+                    # Record usage and return the slot
+                    llmpool.record_slot_usage(slot, actual_tokens)
+                    llmpool.return_llm(slot, lock_token)
+
+                except ValueError as e:
+                    logger.error(f"Error using LLM slot: {e}")
+                    final_response = "I'm experiencing high demand right now. Please try again in a moment."
                     await conversation_service.save_message(
                         self.user_id, "assistant", final_response
                     )
-
-                    logger.info("=" * 80)
+                    return final_response
+                except Exception as e:
+                    logger.error(f"Unexpected error in chat: {e}", exc_info=True)
+                    final_response = (
+                        "I apologize, but I encountered an error. Please try again."
+                    )
+                    await conversation_service.save_message(
+                        self.user_id, "assistant", final_response
+                    )
                     return final_response
 
-            # Save tool calls record for next iteration even if no message tool was called
-            conversation_service.update_conversation_state(
-                self.user_id, {"last_tool_calls": tool_calls_record}
-            )
+                messages.append(response)
 
-            if not state_update_found:
-                logger.warning("No update_working_state call found in this iteration")
+                # Check if LLM called any tools
+                if not response.tool_calls:
+                    # No tools called - LLM provided reasoning/response directly (ERROR STATE)
+                    content = str(response.content) if response.content else ""
+                    logger.warning(
+                        f"LLM responded without tool calls. This violates the protocol. Content: {content}"
+                    )
 
-        # Safety fallback if we hit max iterations
-        if final_response is None:
-            logger.warning(f"Hit max iterations ({max_iterations})")
-            final_response = "I apologize, but I'm having trouble processing your request. Could you please rephrase?"
-            await conversation_service.save_message(
-                self.user_id, "assistant", final_response
-            )
+                    # Force it to call at least the message tool
+                    final_response = (
+                        content or "I apologize, I need to reconsider my approach."
+                    )
+                    await conversation_service.save_message(
+                        self.user_id, "assistant", final_response
+                    )
+                    break
 
-        logger.info("=" * 80)
-        return final_response
+                # VALIDATION: Check minimum 2 tool calls (state + action)
+                if len(response.tool_calls) < 2:
+                    logger.error(
+                        f"Protocol violation: Only {len(response.tool_calls)} tool call(s). Minimum is 2 (state + action)"
+                    )
+                    # Let it proceed but log the violation - the LLM might self-correct next iteration
+
+                # VALIDATION: Check that first tool call is update_working_state
+                first_tool_name = response.tool_calls[0]["name"]
+                if first_tool_name != "update_working_state":
+                    logger.error(
+                        f"Protocol violation: First tool call must be update_working_state, got {first_tool_name}"
+                    )
+                    # Continue anyway - might self-correct
+
+                logger.info(f"Tool calls requested: {len(response.tool_calls)}")
+
+                # Track tool calls for next iteration's prompt
+                tool_calls_record = []
+                state_update_found = False
+
+                # Prepare all tool call coroutines for parallel execution
+                tool_coroutines = []
+                tool_metadata = []  # Track metadata for each coroutine
+
+                for tool_call in response.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+
+                    logger.info(f"\nPreparing tool: {tool_name}")
+                    logger.info(f"Arguments: {tool_args}")
+
+                    # Create coroutine for this tool
+                    tool_coroutines.append(self._execute_tool(tool_name, tool_args))
+                    tool_metadata.append(
+                        {
+                            "tool_name": tool_name,
+                            "tool_args": tool_args,
+                            "tool_call_id": tool_call["id"],
+                        }
+                    )
+
+                # Execute ALL tools in parallel
+                logger.info(
+                    f"Executing {len(tool_coroutines)} tools in parallel using asyncio.gather..."
+                )
+                tool_results = await asyncio.gather(*tool_coroutines)
+
+                # Process results
+                for i, tool_result in enumerate(tool_results):
+                    meta = tool_metadata[i]
+                    tool_name = meta["tool_name"]
+                    tool_args = meta["tool_args"]
+                    tool_call_id = meta["tool_call_id"]
+
+                    logger.info(f"\n✓ Tool completed: {tool_name}")
+                    logger.info(f"Result: {tool_result}")
+
+                    # Track this tool call for next iteration
+                    tool_calls_record.append(
+                        {
+                            "tool_name": tool_name,
+                            "args": tool_args,
+                            "result": tool_result,
+                        }
+                    )
+
+                    # Handle state update tool specially
+                    if tool_name == "update_working_state":
+                        state_update_found = True
+                        if isinstance(tool_result, dict) and tool_result.get("success"):
+                            state_dict = tool_result.get("state_dict", {})
+                            if state_dict:
+                                # Update conversation state with the new state
+                                conversation_service.update_conversation_state(
+                                    self.user_id, state_dict
+                                )
+                                logger.info(
+                                    f"✓ Conversation state updated from update_working_state tool"
+                                )
+
+                    # Add tool result to messages
+                    messages.append(
+                        ToolMessage(
+                            content=str(tool_result),
+                            tool_call_id=tool_call_id,
+                        )
+                    )
+
+                    # Check if this is a message tool (end of iteration)
+                    if isinstance(tool_result, dict) and "message_type" in tool_result:
+                        final_response = tool_result.get("content", "")
+                        logger.info(f"Message tool detected: {tool_name}")
+                        logger.info(f"CHIKU: {final_response}")
+
+                        # Save tool calls record to state for next iteration
+                        conversation_service.update_conversation_state(
+                            self.user_id, {"last_tool_calls": tool_calls_record}
+                        )
+
+                        # Send message via callback if available
+                        if self.message_callback:
+                            self.message_callback(final_response)
+
+                        # Save assistant message to history
+                        await conversation_service.save_message(
+                            self.user_id, "assistant", final_response
+                        )
+
+                        logger.info("=" * 80)
+                        return final_response
+
+                # Save tool calls record for next iteration even if no message tool was called
+                conversation_service.update_conversation_state(
+                    self.user_id, {"last_tool_calls": tool_calls_record}
+                )
+
+                if not state_update_found:
+                    logger.warning(
+                        "No update_working_state call found in this iteration"
+                    )
+
+            # Safety fallback if we hit max iterations
+            if final_response is None:
+                logger.warning(f"Hit max iterations ({max_iterations})")
+                final_response = "I apologize, but I'm having trouble processing your request. Could you please rephrase?"
+                await conversation_service.save_message(
+                    self.user_id, "assistant", final_response
+                )
+
+            logger.info("=" * 80)
+            return final_response
+
+        finally:
+            # Always reset the user_id context when done
+            reset_current_user_id(context_token)
 
     async def _execute_tool(self, tool_name: str, tool_args: Dict[str, Any]) -> Any:
         """Execute a tool by name with given arguments."""

@@ -3,205 +3,348 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface UseElevenLabsStreamReturn {
-  isConnected: boolean;
   isSpeaking: boolean;
-  streamText: (text: string) => void;
+  speak: (text: string) => Promise<void>;
   stopSpeaking: () => void;
   error: string | null;
 }
 
 export function useElevenLabsStream(): UseElevenLabsStreamReturn {
-  const [isConnected, setIsConnected] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioQueueRef = useRef<AudioBuffer[]>([]);
+  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+  // Track completion state
+  const wsClosedRef = useRef(false);
   const isPlayingRef = useRef(false);
-
-  // Initialize AudioContext
-  useEffect(() => {
-    audioContextRef.current = new AudioContext();
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      audioContextRef.current?.close();
-    };
-  }, []);
-
-  // ✅ FIX: Provide initial value (empty function)
+  const resolveCompleteRef = useRef<(() => void) | null>(null);
   const playNextAudioRef = useRef<() => void>(() => {});
 
+  // Ensure AudioContext is ready
+  const ensureAudioContext = async () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+  };
+
+  // Check if we're truly done: WebSocket closed + queue empty + not playing
+  const checkIfComplete = useCallback(() => {
+    const isDone =
+      wsClosedRef.current &&
+      audioQueueRef.current.length === 0 &&
+      !isPlayingRef.current;
+
+    if (isDone && resolveCompleteRef.current) {
+      console.log('✅ [TTS] Playback complete - resolving');
+      const resolve = resolveCompleteRef.current;
+      resolveCompleteRef.current = null;
+      setIsSpeaking(false);
+      resolve();
+    }
+  }, []);
+
+  // Play next audio buffer from queue
   const playNextAudio = useCallback(() => {
-    console.log('[playNextAudio] Called - isPlaying:', isPlayingRef.current, 'queueLength:', audioQueueRef.current.length);
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
+    if (isPlayingRef.current || audioQueueRef.current.length === 0) {
+      return;
+    }
     if (!audioContextRef.current) return;
 
-    isPlayingRef.current = true;
     const audioBuffer = audioQueueRef.current.shift()!;
-    console.log('[playNextAudio] Playing audio buffer, remaining in queue:', audioQueueRef.current.length);
+    isPlayingRef.current = true;
 
     const source = audioContextRef.current.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContextRef.current.destination);
+    currentSourceRef.current = source;
 
     source.onended = () => {
-      console.log('[playNextAudio] Audio ended, remaining in queue:', audioQueueRef.current.length);
       isPlayingRef.current = false;
+      currentSourceRef.current = null;
+
+      // Try to play next buffer
       if (audioQueueRef.current.length > 0) {
-        playNextAudioRef.current();  // ✅ No optional chaining needed
+        playNextAudioRef.current();
       } else {
-        console.log('[playNextAudio] Queue empty, stopping speech');
-        setIsSpeaking(false);
+        // Queue empty - check if we're completely done
+        checkIfComplete();
       }
     };
 
     source.start();
-  }, []);
+  }, [checkIfComplete]);
 
-  // Update ref when function changes
+  // Update ref when callback changes
   useEffect(() => {
     playNextAudioRef.current = playNextAudio;
   }, [playNextAudio]);
 
-  const streamText = useCallback(async (text: string) => {
-    console.log('[streamText] Called with text:', text.substring(0, 50) + '...');
-    if (!text.trim()) {
-      console.log('[streamText] Empty text, aborting');
-      return;
-    }
+  const speak = useCallback(
+    async (text: string) => {
+      console.log('🔊 [TTS] speak() called with:', {
+        text,
+        length: text?.length,
+        trimmed: text?.trim().length,
+      });
 
-    setIsSpeaking(true);
-    setError(null);
+      if (!text.trim()) {
+        console.warn('⚠️ [TTS] Empty text provided, skipping');
+        return;
+      }
 
+      console.log('🔊 [TTS] Starting speech:', text.substring(0, 50));
 
-const voiceId = process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID;
-const modelId = process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID;
-const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
+      // Reset state
+      wsClosedRef.current = false;
+      audioQueueRef.current = [];
+      setError(null);
+      setIsSpeaking(true);
 
-    console.log('[streamText] Config - voiceId:', voiceId, 'modelId:', modelId, 'apiKey:', apiKey ? 'present' : 'missing');
+      await ensureAudioContext();
 
-    if (!apiKey) {
-      console.error('[streamText] API key missing');
-      setError('ElevenLabs API key not found');
-      setIsSpeaking(false);
-      return;
-    }
+      const voiceId = process.env.NEXT_PUBLIC_ELEVENLABS_VOICE_ID;
+      const modelId = process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID;
+      const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
 
-   const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}&xi-api-key=${apiKey}`;
+      console.log('🔑 [TTS] Config:', {
+        voiceId: voiceId ? '✅ Set' : '❌ Missing',
+        modelId: modelId ? '✅ Set' : '❌ Missing',
+        apiKey: apiKey ? '✅ Set' : '❌ Missing',
+      });
 
+      if (!apiKey) {
+        console.error('❌ [TTS] Missing API key');
+        setError('ElevenLabs API key not found');
+        setIsSpeaking(false);
+        return;
+      }
 
-   console.log('[streamText] wsUrl: ', wsUrl);
-    try {
-      console.log('[streamText] Creating WebSocket connection...');
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      if (!voiceId) {
+        console.error('❌ [TTS] Missing voice ID');
+        setError('ElevenLabs voice ID not found');
+        setIsSpeaking(false);
+        return;
+      }
 
-      ws.addEventListener('open', () => {
-  const initMessage = {
-    text: ' ',
-    xi_api_key: apiKey,
-    voice_settings: {
-      stability: 0.5,
-      similarity_boost: 0.8,
-      style: 0.7,
-      use_speaker_boost: true
-    },
-    generation_config: {
-      chunk_length_schedule: [120, 160, 250, 290]
-    }
-  };
-  ws.send(JSON.stringify(initMessage));
+      const wsUrl = `wss://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream-input?model_id=${modelId}`;
+      console.log('🔗 [TTS] WebSocket URL ready');
 
-  ws.send(JSON.stringify({ text, xi_api_key: apiKey }));
-  ws.send(JSON.stringify({ text: '', xi_api_key: apiKey }));
-});
+      return new Promise<void>((resolve, reject) => {
+        resolveCompleteRef.current = resolve;
 
-      ws.addEventListener('message', async (event) => {
+        // Safety timeout: never hang forever
+        const safetyTimeout = setTimeout(() => {
+          console.warn(
+            '⚠️ [TTS] Safety timeout reached - no connection in 30s'
+          );
+          try {
+            wsRef.current?.close();
+          } catch {}
+          setIsSpeaking(false);
+          if (resolveCompleteRef.current) {
+            resolveCompleteRef.current();
+            resolveCompleteRef.current = null;
+          }
+        }, 30000);
+
+        // Connection timeout: if not connected in 5s, fail fast
+        const connectionTimeout = setTimeout(() => {
+          if (wsRef.current && wsRef.current.readyState !== WebSocket.OPEN) {
+            console.error(
+              '❌ [TTS] Connection timeout - WebSocket failed to open'
+            );
+            try {
+              wsRef.current?.close();
+            } catch {}
+            setError('Failed to connect to ElevenLabs');
+            setIsSpeaking(false);
+            if (resolveCompleteRef.current) {
+              reject(new Error('Connection timeout'));
+              resolveCompleteRef.current = null;
+            }
+            clearTimeout(safetyTimeout);
+          }
+        }, 5000);
+
         try {
-          const data = JSON.parse(event.data);
-          console.log('[WebSocket] Message received:', { hasAudio: !!data.audio, isFinal: data.isFinal, keys: Object.keys(data) });
+          console.log('🔌 [TTS] Creating WebSocket connection...');
+          const ws = new WebSocket(wsUrl);
+          wsRef.current = ws;
 
-          if (data.audio) {
-            console.log('[WebSocket] Processing audio chunk, size:', data.audio.length);
-            const audioData = atob(data.audio);
-            const arrayBuffer = new Uint8Array(audioData.length);
-            for (let i = 0; i < audioData.length; i++) {
-              arrayBuffer[i] = audioData.charCodeAt(i);
-            }
+          ws.addEventListener('open', async () => {
+            console.log('✅ [WebSocket] Connected to ElevenLabs');
+            clearTimeout(connectionTimeout);
 
-            if (audioContextRef.current) {
-              const audioBuffer = await audioContextRef.current.decodeAudioData(
-                arrayBuffer.buffer
-              );
-              audioQueueRef.current.push(audioBuffer);
-              console.log('[WebSocket] Audio buffer decoded and queued. Queue length:', audioQueueRef.current.length);
+            await ensureAudioContext();
 
-              if (!isPlayingRef.current) {
-                console.log('[WebSocket] Starting playback');
-                playNextAudio();
+            // Send initialization message with API key
+            const initMessage = {
+              text: ' ',
+              xi_api_key: apiKey,
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.8,
+                style: 0.7,
+                use_speaker_boost: true,
+              },
+              generation_config: {
+                chunk_length_schedule: [120, 160, 250, 290],
+              },
+            };
+            console.log('📤 [TTS] Sending init message');
+            ws.send(JSON.stringify(initMessage));
+
+            // Send main text with API key
+            console.log('📤 [TTS] Sending text message');
+            ws.send(JSON.stringify({ text, xi_api_key: apiKey }));
+
+            // Flush to signal end with API key
+            console.log('📤 [TTS] Sending flush message');
+            ws.send(
+              JSON.stringify({ text: '', xi_api_key: apiKey, flush: true })
+            );
+          });
+
+          ws.addEventListener('message', async (event) => {
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data.audio) {
+                console.log('🎵 [TTS] Received audio chunk');
+                // Decode base64 audio
+                const audioData = atob(data.audio);
+                const arrayBuffer = new Uint8Array(audioData.length);
+                for (let i = 0; i < audioData.length; i++) {
+                  arrayBuffer[i] = audioData.charCodeAt(i);
+                }
+
+                if (audioContextRef.current) {
+                  try {
+                    const audioBuffer =
+                      await audioContextRef.current.decodeAudioData(
+                        arrayBuffer.buffer
+                      );
+                    audioQueueRef.current.push(audioBuffer);
+                    console.log(
+                      '✅ [TTS] Audio decoded, queue size:',
+                      audioQueueRef.current.length
+                    );
+
+                    // Start playing if not already playing
+                    if (!isPlayingRef.current) {
+                      console.log('▶️ [TTS] Starting playback');
+                      playNextAudio();
+                    }
+                  } catch (decodeErr) {
+                    console.error('❌ [TTS] Audio decode error:', decodeErr);
+                  }
+                }
               }
-            }
-          }
 
-          if (data.isFinal) {
-            console.log('✅ [WebSocket] Audio stream complete (isFinal received)');
-            ws.close();
-          }
+              if (data.isFinal) {
+                console.log('🏁 [TTS] Received isFinal signal');
+                ws.close();
+              }
+            } catch (err) {
+              console.error('❌ [TTS] Message processing error:', err);
+            }
+          });
+
+          ws.addEventListener('error', (event) => {
+            console.error('❌ [WebSocket] Error event:', event);
+            console.error('❌ [WebSocket] ReadyState:', ws.readyState);
+            clearTimeout(safetyTimeout);
+            clearTimeout(connectionTimeout);
+            setError('Failed to connect to speech service');
+            setIsSpeaking(false);
+            if (resolveCompleteRef.current) {
+              reject(new Error('WebSocket error'));
+              resolveCompleteRef.current = null;
+            }
+          });
+
+          ws.addEventListener('close', (event) => {
+            console.log('🔌 [WebSocket] Connection closed');
+            console.log(
+              '🔌 [WebSocket] Close code:',
+              event.code,
+              'reason:',
+              event.reason
+            );
+            clearTimeout(safetyTimeout);
+            clearTimeout(connectionTimeout);
+            wsClosedRef.current = true;
+            wsRef.current = null;
+
+            // Check if playback is complete
+            checkIfComplete();
+          });
         } catch (err) {
-          console.error('❌ [WebSocket] Error processing audio:', err);
+          clearTimeout(safetyTimeout);
+          console.error('❌ [TTS] Stream error:', err);
+          setError(
+            err instanceof Error ? err.message : 'Failed to stream audio'
+          );
+          setIsSpeaking(false);
+          reject(err);
         }
       });
-
-      ws.addEventListener('error', (err) => {
-        console.error('❌ [WebSocket] Error:', err);
-        setError('Failed to connect to speech service');
-        setIsSpeaking(false);
-        setIsConnected(false);
-      });
-
-      ws.addEventListener('close', (event) => {
-        console.log('🔌 [WebSocket] Closed - Code:', event.code, 'Reason:', event.reason, 'Clean:', event.wasClean);
-        setIsConnected(false);
-      });
-
-    } catch (err) {
-      console.error('❌ [streamText] Stream error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to stream audio');
-      setIsSpeaking(false);
-    }
-  }, [playNextAudio]);
+    },
+    [playNextAudio, checkIfComplete]
+  );
 
   const stopSpeaking = useCallback(() => {
-    console.log('[stopSpeaking] Called - Closing WebSocket and clearing queue');
+    console.log('🛑 [TTS] Stopping speech');
+
+    // Close WebSocket
     if (wsRef.current) {
-      wsRef.current.close();
+      try {
+        wsRef.current.close();
+      } catch {}
       wsRef.current = null;
     }
 
-    // Stop any currently playing audio
-    if (audioContextRef.current) {
+    // Stop current audio
+    if (currentSourceRef.current) {
       try {
-        audioContextRef.current.suspend();
-      } catch (e) {
-        console.error('[stopSpeaking] Error suspending audio context:', e);
-      }
+        currentSourceRef.current.stop();
+      } catch {}
+      currentSourceRef.current = null;
     }
 
+    // Clear queue and state
     audioQueueRef.current = [];
     isPlayingRef.current = false;
+    wsClosedRef.current = true;
     setIsSpeaking(false);
-    setIsConnected(false);
-    console.log('[stopSpeaking] Cleanup complete');
+
+    // Resolve any pending promise
+    if (resolveCompleteRef.current) {
+      resolveCompleteRef.current();
+      resolveCompleteRef.current = null;
+    }
   }, []);
 
+  // Initialize AudioContext and cleanup
+  useEffect(() => {
+    audioContextRef.current = new AudioContext();
+    return () => {
+      stopSpeaking();
+      audioContextRef.current?.close();
+    };
+  }, [stopSpeaking]);
+
   return {
-    isConnected,
     isSpeaking,
-    streamText,
+    speak,
     stopSpeaking,
-    error
+    error,
   };
 }

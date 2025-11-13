@@ -9,26 +9,25 @@ from typing import Optional
 from datetime import datetime, timedelta
 from app.services.mongo_calendar_service import calendar_service
 from app.utils.embedding_util import generate_embedding, cosine_similarity
+from app.agent.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
 @tool
-async def get_events(
-    user_id: str, start_date: str, end_date: Optional[str] = None
-) -> dict:
+async def get_events(start_date: str, end_date: Optional[str] = None) -> dict:
     """
     Get calendar events for a user within a date range.
 
     Args:
-        user_id: The user's ID
         start_date: Start date in YYYY-MM-DD format
         end_date: End date in YYYY-MM-DD format (optional, defaults to start_date)
 
     Returns:
         dict: List of events with their details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_events")
     logger.info(
@@ -58,17 +57,17 @@ async def get_events(
 
 
 @tool
-async def get_events_on_date(user_id: str, date: str) -> dict:
+async def get_events_on_date(date: str) -> dict:
     """
     Get all events for a specific date.
 
     Args:
-        user_id: The user's ID
         date: Date in YYYY-MM-DD format
 
     Returns:
         dict: List of events for that date
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: get_events_on_date")
     logger.info(f"Parameters: user_id={user_id}, date={date}")
@@ -99,54 +98,48 @@ async def get_events_on_date(user_id: str, date: str) -> dict:
 
 
 @tool
-async def get_todays_schedule(user_id: str) -> dict:
+async def get_todays_schedule() -> dict:
     """
     Get today's schedule for the user.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: Today's events
     """
+    user_id = get_current_user_id()
     today = datetime.now().strftime("%Y-%m-%d")
     logger.info("=" * 60)
     logger.info("TOOL: get_todays_schedule")
     logger.info(f"Parameters: user_id={user_id}, today={today}")
 
-    return await get_events_on_date.ainvoke({"user_id": user_id, "date": today})
+    return await get_events_on_date.ainvoke({"date": today})
 
 
 @tool
-async def get_tomorrows_schedule(user_id: str) -> dict:
+async def get_tomorrows_schedule() -> dict:
     """
     Get tomorrow's schedule for the user.
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: Tomorrow's events
     """
+    user_id = get_current_user_id()
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     logger.info("=" * 60)
     logger.info("TOOL: get_tomorrows_schedule")
     logger.info(f"Parameters: user_id={user_id}, tomorrow={tomorrow}")
 
-    return await get_events_on_date.ainvoke({"user_id": user_id, "date": tomorrow})
+    return await get_events_on_date.ainvoke({"date": tomorrow})
 
 
 @tool
-async def get_week_schedule(user_id: str) -> dict:
+async def get_week_schedule() -> dict:
     """
     Get this week's schedule (next 7 days).
-
-    Args:
-        user_id: The user's ID
 
     Returns:
         dict: This week's events
     """
+    user_id = get_current_user_id()
     start_date = datetime.now().strftime("%Y-%m-%d")
     end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
 
@@ -154,15 +147,11 @@ async def get_week_schedule(user_id: str) -> dict:
     logger.info("TOOL: get_week_schedule")
     logger.info(f"Parameters: user_id={user_id}, range={start_date} to {end_date}")
 
-    return await get_events.ainvoke(
-        {"user_id": user_id, "start_date": start_date, "end_date": end_date}
-    )
+    return await get_events.ainvoke({"start_date": start_date, "end_date": end_date})
 
 
 @tool
-async def find_event_by_title(
-    user_id: str, title_query: str, date: Optional[str] = None
-) -> dict:
+async def find_event_by_title(title_query: str, date: Optional[str] = None) -> dict:
     """
     Search for events by title using semantic similarity (vector embeddings).
     Uses cosine similarity with a 0.7 threshold for matching.
@@ -174,7 +163,6 @@ async def find_event_by_title(
     move_event_to_date, or delete_calendar_event.
 
     Args:
-        user_id: The user's ID
         title_query: Title or partial title to search for (semantic search enabled)
         date: Optional date to narrow search (YYYY-MM-DD format). If not provided, searches all dates.
 
@@ -183,10 +171,11 @@ async def find_event_by_title(
 
     Example:
         User says "move my yoga session to tomorrow"
-        1. Call find_event_by_title(user_id="user_123", title_query="yoga")
+        1. Call find_event_by_title(title_query="yoga")
         2. Get back event_id "691317c99da9a2b1525f35c9" with similarity score 0.95
-        3. Call move_event_to_date(user_id="user_123", event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
+        3. Call move_event_to_date(event_id="691317c99da9a2b1525f35c9", new_date="2025-11-12")
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: find_event_by_title (SEMANTIC SEARCH)")
     logger.info(

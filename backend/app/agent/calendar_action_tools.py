@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 import logging
 from typing import Optional
 from app.services.mongo_calendar_service import calendar_service
+from app.agent.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -14,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def create_calendar_event(
-    user_id: str,
     title: str,
     date: str,
     start_time: str,
@@ -25,7 +25,6 @@ async def create_calendar_event(
     Create a new calendar event.
 
     Args:
-        user_id: The user's ID
         title: Event title
         date: Event date in YYYY-MM-DD format
         start_time: Event start time in HH:MM format
@@ -35,6 +34,7 @@ async def create_calendar_event(
     Returns:
         dict: Created event details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: create_calendar_event")
     logger.info(
@@ -66,7 +66,6 @@ async def create_calendar_event(
 
 @tool
 async def update_calendar_event(
-    user_id: str,
     event_id: str,
     title: Optional[str] = None,
     date: Optional[str] = None,
@@ -87,7 +86,6 @@ async def update_calendar_event(
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         title: New event title (optional)
         date: New event date in YYYY-MM-DD format (optional)
@@ -98,6 +96,7 @@ async def update_calendar_event(
     Returns:
         dict: Updated event details or error
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: update_calendar_event")
     logger.info(f"Parameters: user_id={user_id}, event_id={event_id}")
@@ -135,7 +134,7 @@ async def update_calendar_event(
 
 @tool
 async def move_event_to_date(
-    user_id: str, event_id: str, new_date: str, new_start_time: Optional[str] = None
+    event_id: str, new_date: str, new_start_time: Optional[str] = None
 ) -> dict:
     """
     Move an event to a different date, optionally changing the time.
@@ -151,7 +150,6 @@ async def move_event_to_date(
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
         new_date: New date in YYYY-MM-DD format
         new_start_time: New start time in HH:MM format (optional, keeps original time if not provided)
@@ -159,6 +157,7 @@ async def move_event_to_date(
     Returns:
         dict: Updated event details
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: move_event_to_date")
     logger.info(
@@ -191,7 +190,7 @@ async def move_event_to_date(
 
 
 @tool
-async def delete_calendar_event(user_id: str, event_id: str) -> dict:
+async def delete_calendar_event(event_id: str) -> dict:
     """
     Delete a calendar event.
 
@@ -205,12 +204,12 @@ async def delete_calendar_event(user_id: str, event_id: str) -> dict:
         3. Then call this function with that event_id
 
     Args:
-        user_id: The user's ID
         event_id: The MongoDB ObjectId string (obtained from a previous query, NOT a title)
 
     Returns:
         dict: Success status
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: delete_calendar_event")
     logger.info(f"Parameters: user_id={user_id}, event_id={event_id}")

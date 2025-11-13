@@ -5,6 +5,7 @@ Availability checking tools for finding free time slots.
 from langchain_core.tools import tool
 import logging
 from app.services.mongo_calendar_service import calendar_service
+from app.agent.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -12,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 @tool
 async def find_available_slots(
-    user_id: str,
     date: str,
     duration_minutes: int,
     work_start_hour: int = 9,
@@ -22,7 +22,6 @@ async def find_available_slots(
     Find available time slots on a given date that can fit an event of specified duration.
 
     Args:
-        user_id: The user's ID
         date: Date to check in YYYY-MM-DD format
         duration_minutes: Required duration in minutes
         work_start_hour: Start of work day (default 9am)
@@ -31,6 +30,7 @@ async def find_available_slots(
     Returns:
         dict: List of available time slots
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: find_available_slots")
     logger.info(
@@ -54,14 +54,11 @@ async def find_available_slots(
 
 
 @tool
-async def check_time_availability(
-    user_id: str, date: str, start_time: str, duration: int
-) -> dict:
+async def check_time_availability(date: str, start_time: str, duration: int) -> dict:
     """
     Check if a specific time slot is available (no conflicts).
 
     Args:
-        user_id: The user's ID
         date: Date in YYYY-MM-DD format
         start_time: Start time in HH:MM format
         duration: Duration in minutes
@@ -69,6 +66,7 @@ async def check_time_availability(
     Returns:
         dict: Whether the time is available
     """
+    user_id = get_current_user_id()
     logger.info("=" * 60)
     logger.info("TOOL: check_time_availability")
     logger.info(
