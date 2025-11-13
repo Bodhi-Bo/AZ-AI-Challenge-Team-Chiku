@@ -1,0 +1,14 @@
+fastapi[standard]
+pydantic
+pydantic-settings
+python-dotenv
+websockets
+langchain
+langgraph
+langchain-openai
+python-dateutil
+pymongo
+motor
+beanie
+redis
+sentence-transformers
