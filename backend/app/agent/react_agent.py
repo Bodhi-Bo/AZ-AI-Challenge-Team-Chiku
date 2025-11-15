@@ -37,6 +37,9 @@ from app.agent.message_tools import (
 from app.agent.state_tools import (
     update_working_state,
 )
+from app.agent.decomposer_tools import (
+    decompose_task,
+)
 from app.agent.tool_context import (
     set_current_user_id,
     reset_current_user_id,
@@ -65,6 +68,8 @@ class ReactCalendarAgent:
         self.tools = [
             # State management (MUST be called first)
             update_working_state,
+            # Task decomposition
+            decompose_task,
             # Calendar query tools
             get_events,
             get_events_on_date,
@@ -446,6 +451,8 @@ class ReactCalendarAgent:
         tool_map = {
             # State management
             "update_working_state": update_working_state,
+            # Task decomposition
+            "decompose_task": decompose_task,
             # Calendar query tools
             "get_events": get_events,
             "get_events_on_date": get_events_on_date,

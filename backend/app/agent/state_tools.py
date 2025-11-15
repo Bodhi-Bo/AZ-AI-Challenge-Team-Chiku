@@ -4,7 +4,7 @@ State management tools for conversation context and user profile.
 
 from langchain_core.tools import tool
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from app.services.conversation_service import conversation_service
 from app.agent.tool_context import get_current_user_id
 
@@ -13,7 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 @tool
-async def update_working_state(state_dict: Dict[str, Any]) -> Dict[str, Any]:
+async def update_working_state(
+    reasoning: str,
+    intent: Optional[Dict[str, Any]] = None,
+    context: Optional[Dict[str, Any]] = None,
+    planning: Optional[Dict[str, Any]] = None,
+    commitments: Optional[List[Dict[str, Any]]] = None,
+    confidence: Optional[float] = None,
+    conversation_phase: Optional[str] = None,
+    emotional_trajectory: Optional[List[str]] = None,
+    **kwargs: Any,
+) -> Dict[str, Any]:
     """
     Update your internal working state based on conversation history and tool results.
 
@@ -24,22 +34,16 @@ async def update_working_state(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     - {{last_tool_actions_and_result}}: Results from your last tool calls
     - Current user message and context
 
-    State Schema:
-    Required fields:
-    - intent: {high_level_goal, current_objective, priority}
-    - reasoning: (string) Your thought process for this iteration
-
-    Recommended optional fields:
-    - context: {emotional_state, time_horizon, constraints, preferences}
-    - planning: {missing_info, next_microstep, anticipated_user_response}
-    - commitments: [{type, id, status, summary}, ...]
-    - confidence: 0.0-1.0
-
-    You can add ANY custom fields that help you track state effectively.
-    Examples: emotional_trajectory, conversation_phase, user_patterns, etc.
-
     Args:
-        state_dict: Your updated working state with insights from last iteration
+        reasoning: (REQUIRED) Your thought process for this iteration - why you're making the calls you're making
+        intent: {high_level_goal, current_objective, priority} - What the user ultimately wants and what you're working on now
+        context: {emotional_state, time_horizon, constraints, preferences} - User's emotional state and situational context
+        planning: {missing_info, next_microstep, anticipated_user_response} - What you need and what's next
+        commitments: [{type, id, status, summary}, ...] - Events/reminders you've created or modified
+        confidence: 0.0-1.0 - How certain you are about your interpretation
+        conversation_phase: Current phase like "discovery", "planning", "execution", "confirmation"
+        emotional_trajectory: List tracking how user's mood evolves, e.g. ["confused", "overwhelmed"]
+        **kwargs: Any additional custom fields you want to track
 
     Returns:
         dict: Confirmation of state update
@@ -48,22 +52,29 @@ async def update_working_state(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     logger.info("=" * 60)
     logger.info("TOOL: update_working_state")
     logger.info(f"User ID: {user_id}")
+
+    # Build state_dict from all parameters
+    state_dict: Dict[str, Any] = {"reasoning": reasoning}
+
+    if intent is not None:
+        state_dict["intent"] = intent
+    if context is not None:
+        state_dict["context"] = context
+    if planning is not None:
+        state_dict["planning"] = planning
+    if commitments is not None:
+        state_dict["commitments"] = commitments
+    if confidence is not None:
+        state_dict["confidence"] = confidence
+    if conversation_phase is not None:
+        state_dict["conversation_phase"] = conversation_phase
+    if emotional_trajectory is not None:
+        state_dict["emotional_trajectory"] = emotional_trajectory
+
+    # Add any custom kwargs
+    state_dict.update(kwargs)
+
     logger.info(f"State update: {state_dict}")
-
-    # Validate required fields
-    if "intent" not in state_dict:
-        logger.warning("Missing required field: intent")
-        return {
-            "success": False,
-            "error": "Missing required field: intent",
-        }
-
-    if "reasoning" not in state_dict:
-        logger.warning("Missing required field: reasoning")
-        return {
-            "success": False,
-            "error": "Missing required field: reasoning",
-        }
 
     # Actually persist the state update to conversation service
     conversation_service.update_conversation_state(user_id, state_dict)
@@ -72,11 +83,12 @@ async def update_working_state(state_dict: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(
         f"  Intent: {state_dict.get('intent', {}).get('current_objective', 'N/A')}"
     )
-    logger.info(f"  Reasoning: {state_dict.get('reasoning', 'N/A')[:100]}...")
+    logger.info(f"  Reasoning: {reasoning[:100]}...")
 
     return {
         "success": True,
         "message": "State updated and persisted successfully",
+        "state_dict": state_dict,
     }
 
 
