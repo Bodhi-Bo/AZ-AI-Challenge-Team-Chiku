@@ -11,6 +11,7 @@ import CreateTaskDialog from "./CreateTaskDialog";
 import type { Task } from "@/lib/stores/calendarStore";
 import TaskListModal from "./TaskListModel";
 import { CalendarEvent } from "@/types";
+import { getCurrentMSTTime, convertToMST } from "@/lib/timezone";
 
 interface CalendarViewProps {
   onClose?: () => void;
@@ -27,7 +28,7 @@ export default function CalendarView({
     useCalendarStore();
 
   const [currentDate, setCurrentDate] = useState(targetDate || selectedDate);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState(getCurrentMSTTime());
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [direction, setDirection] = useState<"next" | "prev">("next");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -41,7 +42,7 @@ export default function CalendarView({
   // ✅ Navigate to target date if provided (SINGLE useEffect, not two!)
   useEffect(() => {
     if (targetDate) {
-      const today = new Date();
+      const today = getCurrentMSTTime();
       const daysDiff = Math.floor(
         (targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
@@ -65,7 +66,7 @@ export default function CalendarView({
   // ✅ Update current time for red line indicator
   useEffect(() => {
     const interval = setInterval(() => {
-      setCurrentTime(new Date());
+      setCurrentTime(getCurrentMSTTime());
     }, 60000); // Update every minute
     return () => clearInterval(interval);
   }, []);
@@ -95,7 +96,7 @@ export default function CalendarView({
   };
 
   const goToToday = () => {
-    const today = new Date();
+    const today = getCurrentMSTTime();
     const daysDiff = Math.floor(
       (today.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -137,8 +138,8 @@ export default function CalendarView({
   };
 
   const handleCreateTask = (taskData: Omit<Task, "id">) => {
-    const startTime = new Date(taskData.startTime);
-    const endTime = new Date(taskData.endTime);
+    const startTime = convertToMST(new Date(taskData.startTime));
+    const endTime = convertToMST(new Date(taskData.endTime));
     const duration = Math.round(
       (endTime.getTime() - startTime.getTime()) / 60000
     );
@@ -152,8 +153,8 @@ export default function CalendarView({
       duration: duration,
       description: taskData.description,
       event_datetime: startTime.toISOString(),
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_at: getCurrentMSTTime().toISOString(),
+      updated_at: getCurrentMSTTime().toISOString(),
     };
 
     addEvent(newEvent);

@@ -13,6 +13,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import { useCalendar } from "@/hooks/useCalendar";
 import VoiceMode from "../voice/VoiceMode";
+import VideoMascot from "../mascot/VideoMascot";
 
 export default function ChatWindow() {
   const { messages, isLoading } = useChatStore();
@@ -56,6 +57,9 @@ export default function ChatWindow() {
       {/* Cloud Background */}
       <CloudBackground />
 
+      {/* White gradient overlay at top for mascot blending */}
+      <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-white via-white/80 to-transparent z-[5] pointer-events-none" />
+
       {isVoiceActive ? (
         <VoiceMode
           isActive={isVoiceActive}
@@ -63,31 +67,32 @@ export default function ChatWindow() {
         />
       ) : (
         <>
+          {/* Sticky Video Mascot at Top */}
+          <div className="shrink-0 relative z-10 flex justify-center py-2">
+            <VideoMascot
+              videoSrc={isLoading ? "think" : "normal"}
+              width={110}
+              height={110}
+              className=""
+            />
+          </div>
+
+          {/* Scrollable Chat Area with Fixed Height */}
           <div className="flex-1 overflow-hidden relative z-10">
             <ScrollArea className="h-full">
-              <div className="px-8 py-12">
-                <div className="max-w-4xl mx-auto">
+              <div className="px-8 py-6">
+                <div
+                  className="max-w-4xl mx-auto"
+                  style={{ minHeight: "calc(100vh - 500px)" }}
+                >
                   {messages.length === 0 ? (
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.6 }}
-                      className="flex items-center justify-center min-h-[60vh]"
+                      className="flex items-center justify-center py-12"
                     >
                       <div className="text-center space-y-6 max-w-2xl">
-                        <motion.div
-                          animate={{
-                            y: [0, -10, 0],
-                          }}
-                          transition={{
-                            duration: 3,
-                            repeat: Infinity,
-                            ease: "easeInOut",
-                          }}
-                          className="inline-block p-4 mb-4"
-                        >
-                          <span className="text-8xl">🦊</span>
-                        </motion.div>
                         <h1 className="text-5xl font-bold text-blue-700">
                           Hi, I&apos;m Chiku!
                         </h1>
@@ -103,15 +108,6 @@ export default function ChatWindow() {
                     </motion.div>
                   ) : (
                     <>
-                      {/* Mascot at top when chat starts */}
-                      <motion.div
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4 }}
-                        className="flex justify-center mb-8"
-                      >
-                        <div className="text-6xl">🦊</div>
-                      </motion.div>
                       <MessageList messages={messages} isLoading={isLoading} />
                       <div ref={messagesEndRef} />
                     </>

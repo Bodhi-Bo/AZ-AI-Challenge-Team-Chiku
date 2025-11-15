@@ -43,9 +43,9 @@ export default function WaveformVisualizer({
 
       const barWidth = width / bufferLength;
       const gradient = ctx.createLinearGradient(0, 0, width, 0);
-      gradient.addColorStop(0, "#667eea");
-      gradient.addColorStop(0.5, "#764ba2");
-      gradient.addColorStop(1, "#f093fb");
+      gradient.addColorStop(0, "#3b82f6");
+      gradient.addColorStop(0.5, "#60a5fa");
+      gradient.addColorStop(1, "#93c5fd");
 
       for (let i = 0; i < bufferLength; i++) {
         const value = dataArray[i];
@@ -82,8 +82,8 @@ export default function WaveformVisualizer({
         height={120}
         className="rounded-2xl"
         style={{
-          background: "rgba(255, 255, 255, 0.05)",
-          backdropFilter: "blur(10px)",
+          background: "rgba(59, 130, 246, 0.05)",
+          border: "1px solid rgba(59, 130, 246, 0.1)",
         }}
       />
     </motion.div>

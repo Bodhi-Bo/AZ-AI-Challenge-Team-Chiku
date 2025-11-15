@@ -19,29 +19,29 @@ export default function VoiceControls({
       {/* Mic Toggle */}
       <motion.button
         onClick={onToggle}
-        className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+        className={`w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg ${
           isListening
             ? "bg-red-500 hover:bg-red-600"
-            : "bg-white/20 hover:bg-white/30"
+            : "bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
         }`}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
       >
         {isListening ? (
-          <Mic className="w-8 h-8 text-white" />
+          <Mic className="w-6 h-6 text-black" />
         ) : (
-          <MicOff className="w-8 h-8 text-white" />
+          <MicOff className="w-6 h-6 text-black" />
         )}
       </motion.button>
 
       {/* End Call */}
       <motion.button
         onClick={onEnd}
-        className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-all"
+        className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 flex items-center justify-center transition-all shadow-lg"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
       >
-        <PhoneOff className="w-6 h-6 text-white" />
+        <PhoneOff className="w-6 h-6 text-black" />
       </motion.button>
     </div>
   );
