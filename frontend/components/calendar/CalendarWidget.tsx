@@ -22,7 +22,7 @@ export default function CalendarWidget() {
       whileHover={{ scale: 1.02 }}
       transition={{ duration: 0.2 }}
       onClick={toggleCalendar}
-      className="gradient-blue-white rounded-2xl p-6 shadow-md cursor-pointer hover:shadow-lg transition-all"
+      className="gradient-blue-white backdrop-blur-sm rounded-2xl p-6 shadow-sm cursor-pointer hover:shadow-md hover:bg-white/70 transition-all"
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-4">

@@ -57,6 +57,9 @@ export default function ChatWindow() {
       {/* Cloud Background */}
       <CloudBackground />
 
+      {/* White gradient overlay at top for mascot blending */}
+      <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-white via-white/80 to-transparent z-[5] pointer-events-none" />
+
       {isVoiceActive ? (
         <VoiceMode
           isActive={isVoiceActive}
