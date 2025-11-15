@@ -2,7 +2,7 @@ from langchain_core.tools import tool
 import logging
 from typing import Optional, List
 from app.services.mongo_calendar_service import calendar_service
-from app.agent.tool_context import get_current_user_id
+from app.agent_tools.tool_context import get_current_user_id
 from datetime import datetime, timedelta
 
 # Configure logging

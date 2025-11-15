@@ -47,7 +47,7 @@ async def startup_event():
         )
 
 
-from app.agent.react_agent import create_react_agent, ReactCalendarAgent
+from app.agents.react.react_agent import create_react_agent, ReactCalendarAgent
 
 user_agents: Dict[str, ReactCalendarAgent] = {}
 

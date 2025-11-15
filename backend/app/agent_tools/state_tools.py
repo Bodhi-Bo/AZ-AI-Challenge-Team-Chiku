@@ -6,7 +6,7 @@ from langchain_core.tools import tool
 import logging
 from typing import Dict, Any, Optional, List
 from app.services.conversation_service import conversation_service
-from app.agent.tool_context import get_current_user_id
+from app.agent_tools.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ async def update_working_state(
     confidence: Optional[float] = None,
     conversation_phase: Optional[str] = None,
     emotional_trajectory: Optional[List[str]] = None,
+    decomposer: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Dict[str, Any]:
     """
@@ -43,6 +44,7 @@ async def update_working_state(
         confidence: 0.0-1.0 - How certain you are about your interpretation
         conversation_phase: Current phase like "discovery", "planning", "execution", "confirmation"
         emotional_trajectory: List tracking how user's mood evolves, e.g. ["confused", "overwhelmed"]
+        decomposer: {batch_questions, batch_answers, current_question_index} - State for decomposer interaction
         **kwargs: Any additional custom fields you want to track
 
     Returns:
@@ -70,6 +72,8 @@ async def update_working_state(
         state_dict["conversation_phase"] = conversation_phase
     if emotional_trajectory is not None:
         state_dict["emotional_trajectory"] = emotional_trajectory
+    if decomposer is not None:
+        state_dict["decomposer"] = decomposer
 
     # Add any custom kwargs
     state_dict.update(kwargs)
@@ -144,4 +148,50 @@ async def update_user_profile(profile_updates: Dict[str, Any]) -> Dict[str, Any]
         "success": True,
         "message": "User profile updated successfully",
         "profile_keys": list(updated_profile.keys()),
+    }
+
+
+@tool
+async def reset_conversation_state() -> Dict[str, Any]:
+    """
+    Reset the conversation state to start fresh.
+
+    **CRITICAL: Call this tool when you send a FINAL declarative message that completes
+    the user's request and ends the conversation.**
+
+    This tool:
+    - Marks all messages from the current session as old (is_old=True in DB)
+    - Resets the conversation state while preserving user_profile
+    - Generates a new session_id for the next conversation
+
+    **When to call this:**
+    - After sending a final declarative message confirming task completion
+    - When the conversation phase is "confirmation" or "complete"
+    - When the user confirms everything is done and you say goodbye
+
+    **When NOT to call this:**
+    - During ongoing conversations
+    - When asking questions or awaiting user input
+    - When you expect the user to continue the conversation
+
+    Returns:
+        dict: Confirmation of state reset with count of messages marked as old
+    """
+    user_id = get_current_user_id()
+    logger.info("=" * 60)
+    logger.info("TOOL: reset_conversation_state")
+    logger.info(f"User ID: {user_id}")
+
+    # Call the async reset method
+    result = await conversation_service.reset_transient_state(user_id)
+
+    logger.info(f"✓ Conversation state reset successfully")
+    logger.info(f"  Messages marked as old: {result.get('messages_marked_old', 0)}")
+    logger.info(f"  New session ID generated: {result.get('new_session_id', 'N/A')}")
+
+    return {
+        "success": True,
+        "message": "Conversation state reset successfully - ready for next conversation",
+        "messages_marked_old": result.get("messages_marked_old", 0),
+        "new_session_id": result.get("new_session_id"),
     }

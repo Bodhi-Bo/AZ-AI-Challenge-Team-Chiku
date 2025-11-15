@@ -5,7 +5,7 @@ Availability checking tools for finding free time slots.
 from langchain_core.tools import tool
 import logging
 from app.services.mongo_calendar_service import calendar_service
-from app.agent.tool_context import get_current_user_id
+from app.agent_tools.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)

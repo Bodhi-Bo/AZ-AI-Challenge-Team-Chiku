@@ -9,7 +9,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 from app.services.mongo_calendar_service import calendar_service
 from app.utils.embedding_util import generate_embedding, cosine_similarity
-from app.agent.tool_context import get_current_user_id
+from app.agent_tools.tool_context import get_current_user_id
 
 # Configure logging
 logger = logging.getLogger(__name__)
