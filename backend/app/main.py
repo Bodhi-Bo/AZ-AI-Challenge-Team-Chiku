@@ -1,4 +1,11 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    HTTPException,
+    Query,
+    APIRouter,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List
@@ -26,6 +33,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create API router with /api prefix
+api_router = APIRouter(prefix="/api")
 
 # Store agent instances per user
 # Initialize calendar service
@@ -125,12 +135,12 @@ class ChatHistoryResponse(BaseModel):
     total: int
 
 
-@app.get("/health")
+@api_router.get("/health")
 def health():
     return {"status": "ok"}
 
 
-@app.post("/chat", response_model=ChatResponse)
+@api_router.post("/chat", response_model=ChatResponse)
 async def chat(msg: ChatMessage):
     """
     Legacy REST endpoint for chat (kept for compatibility).
@@ -156,7 +166,7 @@ async def chat(msg: ChatMessage):
     return ChatResponse(reply=response_text)
 
 
-@app.get("/events/{user_id}/range", response_model=CalendarEventsResponse)
+@api_router.get("/events/{user_id}/range", response_model=CalendarEventsResponse)
 async def get_events_range(
     user_id: str,
     start_date: str = Query(..., description="Start date in YYYY-MM-DD format"),
@@ -212,7 +222,7 @@ async def get_events_range(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/reminders/{user_id}/upcoming", response_model=RemindersResponse)
+@api_router.get("/reminders/{user_id}/upcoming", response_model=RemindersResponse)
 async def get_upcoming_reminders(
     user_id: str,
     hours_ahead: int = Query(24, description="Number of hours to look ahead"),
@@ -260,7 +270,7 @@ async def get_upcoming_reminders(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/messages/{user_id}", response_model=ChatHistoryResponse)
+@api_router.get("/messages/{user_id}", response_model=ChatHistoryResponse)
 async def get_chat_history(
     user_id: str,
     limit: int = Query(50, description="Maximum number of messages to return"),
@@ -303,7 +313,7 @@ async def get_chat_history(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.websocket("/ws/{user_id}")
+@api_router.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     """
     WebSocket endpoint for real-time chat with Chiku, the calendar assistant.
@@ -369,3 +379,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             f"❌ Error in WebSocket connection for {user_id}: {e}", exc_info=True
         )
         await websocket.close()
+
+
+# Include the API router
+app.include_router(api_router)

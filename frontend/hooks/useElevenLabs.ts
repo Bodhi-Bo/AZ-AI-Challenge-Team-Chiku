@@ -36,18 +36,18 @@ export function useElevenLabs() {
         {
           method: 'POST',
           headers: {
-            'Accept': 'audio/mpeg',
+            Accept: 'audio/mpeg',
             'Content-Type': 'application/json',
             'xi-api-key': apiKey,
           },
           body: JSON.stringify({
             text: text,
-            model_id: 'eleven_turbo_v2_5',
+            model_id: process.env.NEXT_PUBLIC_ELEVENLABS_MODEL_ID,
             voice_settings: {
               stability: 0.5,
               similarity_boost: 0.75,
-            }
-          })
+            },
+          }),
         }
       );
 
@@ -81,10 +81,11 @@ export function useElevenLabs() {
 
       setIsSpeaking(false);
       console.log('✅ isSpeaking set to false');
-
     } catch (err) {
       console.error('❌ ElevenLabs error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to generate speech');
+      setError(
+        err instanceof Error ? err.message : 'Failed to generate speech'
+      );
       setIsSpeaking(false);
     }
   }, []);
@@ -101,6 +102,6 @@ export function useElevenLabs() {
     speak,
     stop,
     isSpeaking,
-    error
+    error,
   };
 }
