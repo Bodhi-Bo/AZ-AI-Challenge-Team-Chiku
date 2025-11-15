@@ -8,7 +8,7 @@ export function useElevenLabs() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const speak = useCallback(async (text: string) => {
+  const speak = useCallback(async (text: string, onAudioStart?: () => void) => {
     if (!text.trim()) return;
 
     const apiKey = process.env.NEXT_PUBLIC_ELEVENLABS_API_KEY;
@@ -74,6 +74,14 @@ export function useElevenLabs() {
           console.error('❌ Audio playback error:', e);
           setError('Failed to play audio');
           reject(e);
+        };
+
+        // Call callback when audio actually starts playing
+        audio.onplay = () => {
+          console.log('🔊 Audio started playing');
+          if (onAudioStart) {
+            onAudioStart();
+          }
         };
 
         audio.play().catch(reject);

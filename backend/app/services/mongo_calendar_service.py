@@ -1,9 +1,6 @@
-"""
-Calendar service using Beanie ODM for MongoDB operations.
-Provides semantic calendar and reminder management.
-"""
+"""\nCalendar service using Beanie ODM for MongoDB operations.\nProvides semantic calendar and reminder management.\n\nAll event datetimes are stored in UTC. Incoming date/time values from tools\n(e.g. "2025-11-15" + "17:30") are interpreted as **local MST (UTC-7)** and\nconverted to UTC before persistence so that the frontend, which renders in MST,\nshows the correct wall-clock time.\n"""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from beanie import PydanticObjectId
 
@@ -26,9 +23,21 @@ class MongoCalendarService:
         duration: int,
         description: Optional[str] = None,
     ) -> CalendarEvent:
-        """Create a new calendar event."""
-        # Parse date and time strings into a datetime object
-        event_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+        """Create a new calendar event.
+
+        The `date` and `start_time` arguments are assumed to be in the user's
+        local Mountain Standard Time (MST, UTC-7). We convert this local time
+        to UTC before storing so that all `event_datetime` values in MongoDB
+        are timezone-consistent.
+        """
+
+        # 1) Parse naive local datetime (as provided by tools / agent)
+        local_naive = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+
+        # 2) Attach MST (UTC-7) timezone, then convert to UTC for storage
+        mst_offset = timezone(timedelta(hours=-7))
+        local_mst = local_naive.replace(tzinfo=mst_offset)
+        event_datetime_utc = local_mst.astimezone(timezone.utc)
 
         # Generate embedding for semantic search
         title_embedding = generate_embedding(title)
@@ -36,7 +45,7 @@ class MongoCalendarService:
         event = CalendarEvent(
             user_id=user_id,
             title=title,
-            event_datetime=event_datetime,
+            event_datetime=event_datetime_utc,
             duration=duration,
             description=description,
             title_embedding=title_embedding,
@@ -102,14 +111,21 @@ class MongoCalendarService:
 
             update_data: Dict[str, Any] = {"updated_at": datetime.utcnow()}
 
-            # If date or start_time is being updated, we need to update event_datetime
+            # If date or start_time is being updated, recompute event_datetime.
+            # Input date/time are interpreted as local MST (UTC-7) and then
+            # converted to UTC for storage, matching create_event behaviour.
             if date is not None or start_time is not None:
                 # Use existing values if not updating
                 current_date = date if date else event.date
                 current_time = start_time if start_time else event.start_time
-                update_data["event_datetime"] = datetime.strptime(
+
+                local_naive = datetime.strptime(
                     f"{current_date} {current_time}", "%Y-%m-%d %H:%M"
                 )
+                mst_offset = timezone(timedelta(hours=-7))
+                local_mst = local_naive.replace(tzinfo=mst_offset)
+                event_datetime_utc = local_mst.astimezone(timezone.utc)
+                update_data["event_datetime"] = event_datetime_utc
 
             if title is not None:
                 update_data["title"] = title

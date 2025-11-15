@@ -6,6 +6,10 @@ import { useElevenLabs } from './useElevenLabs';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
+interface UseVoiceConversationOptions {
+  onMessageReceived?: (message: string) => void;
+}
+
 interface UseVoiceConversationReturn {
   phase: Phase;
   transcription: string;
@@ -16,7 +20,9 @@ interface UseVoiceConversationReturn {
   error: string | null;
 }
 
-export function useVoiceConversation(): UseVoiceConversationReturn {
+export function useVoiceConversation(
+  options?: UseVoiceConversationOptions
+): UseVoiceConversationReturn {
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -30,14 +36,10 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     isFinal,
     startListening,
     stopListening,
-    resetTranscript
+    resetTranscript,
   } = useSpeechRecognition();
 
-  const {
-    speak,
-    isSpeaking,
-    error: ttsError
-  } = useElevenLabs();
+  const { speak, isSpeaking, error: ttsError } = useElevenLabs();
 
   // Query the server with user input
   const queryServer = useCallback(async (message: string): Promise<string> => {
@@ -77,10 +79,9 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     console.log(`🔊 Speaking: ${wasSpeaking} → ${isCurrentlySpeaking}`);
     previousSpeakingRef.current = isCurrentlySpeaking;
 
-    // AI started speaking
+    // AI started speaking - stop mic to prevent echo
     if (!wasSpeaking && isCurrentlySpeaking) {
-      console.log("🔇 AI started speaking - stopping mic");
-      setPhase('speaking');
+      console.log('🔇 AI started speaking - stopping mic');
       if (isListening) {
         stopListening();
       }
@@ -88,7 +89,7 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
 
     // AI finished speaking
     if (wasSpeaking && !isCurrentlySpeaking) {
-      console.log("🎤 AI finished speaking");
+      console.log('🎤 AI finished speaking');
 
       // Only auto-resume if conversation is active
       if (isActiveRef.current) {
@@ -129,12 +130,25 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
 
         if (!isActiveRef.current) return;
 
-        setPhase('speaking');
-        await speak(response);
+        // Trigger calendar sync callback if provided
+        if (options?.onMessageReceived) {
+          console.log('📅 Triggering calendar sync after message received');
+          options.onMessageReceived(response);
+        }
 
+        // Stay in 'thinking' phase until audio actually starts playing
+        await speak(response, () => {
+          // This callback is called when audio starts playing
+          if (isActiveRef.current) {
+            console.log('🔊 Audio started - changing to speaking phase');
+            setPhase('speaking');
+          }
+        });
       } catch (err) {
         console.error('❌ Send error:', err);
-        setError(err instanceof Error ? err.message : 'Failed to process message');
+        setError(
+          err instanceof Error ? err.message : 'Failed to process message'
+        );
         setPhase('error');
 
         // Auto-recover from error
@@ -151,7 +165,17 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     };
 
     sendMessage();
-  }, [isFinal, transcript, phase, queryServer, speak, stopListening, resetTranscript, startListening]);
+  }, [
+    isFinal,
+    transcript,
+    phase,
+    queryServer,
+    speak,
+    stopListening,
+    resetTranscript,
+    startListening,
+    options,
+  ]);
 
   // Sync TTS errors
   useEffect(() => {

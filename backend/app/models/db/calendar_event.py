@@ -2,7 +2,7 @@
 Calendar Event Beanie Document Model
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from beanie import Document
 from pydantic import Field, computed_field
@@ -25,14 +25,26 @@ class CalendarEvent(Document):
     @computed_field
     @property
     def date(self) -> str:
-        """Return date in YYYY-MM-DD format."""
-        return self.event_datetime.strftime("%Y-%m-%d")
+        """Return local (MST, UTC-7) date in YYYY-MM-DD format.
+
+        Events are stored in UTC in `event_datetime`. For user-facing fields
+        like `date` and `start_time`, we convert to Mountain Standard Time
+        so the calendar UI, which operates in MST, shows the expected
+        wall-clock day and time.
+        """
+
+        mst_offset = timezone(timedelta(hours=-7))
+        mst_dt = self.event_datetime.astimezone(mst_offset)
+        return mst_dt.strftime("%Y-%m-%d")
 
     @computed_field
     @property
     def start_time(self) -> str:
-        """Return time in HH:MM format."""
-        return self.event_datetime.strftime("%H:%M")
+        """Return local (MST, UTC-7) time in HH:MM format."""
+
+        mst_offset = timezone(timedelta(hours=-7))
+        mst_dt = self.event_datetime.astimezone(mst_offset)
+        return mst_dt.strftime("%H:%M")
 
     class Settings:
         name = "events"  # Collection name
