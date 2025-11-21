@@ -7,7 +7,7 @@ import sys
 async def chat():
     """Simple WebSocket client to chat with the calendar assistant."""
     user_id = "6915408f5d210a8bbafdb8c7"
-    uri = f"ws://localhost:8000/ws/{user_id}"
+    uri = f"ws://localhost:8000/api/ws/{user_id}"
 
     while True:  # Auto-reconnect loop
         try:

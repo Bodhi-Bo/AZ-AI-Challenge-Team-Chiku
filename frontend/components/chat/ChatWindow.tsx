@@ -95,7 +95,7 @@ export default function ChatWindow() {
                           Hi, I&apos;m Chiku!
                         </h1>
                         <p className='text-xl text-gray-600'>
-                          Your personalized executive function assistant.
+                          Your personal executive assistant.
                         </p>
                         <p className='text-gray-500 max-w-md mx-auto'>
                           I can help you break down tasks, manage your schedule,

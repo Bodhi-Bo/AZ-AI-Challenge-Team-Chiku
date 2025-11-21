@@ -61,21 +61,37 @@ class MongoCalendarService:
     async def get_events_by_date_range(
         self, user_id: str, start_date: str, end_date: Optional[str] = None
     ) -> List[CalendarEvent]:
-        """Get events for a user within a date range."""
+        """
+        Get events for a user within a date range.
+
+        The date strings (e.g. "2025-11-15") are interpreted as MST calendar days.
+        We convert them to UTC boundaries for querying the database, ensuring that
+        events stored in UTC are correctly matched to their MST calendar day.
+        """
         if not end_date:
             end_date = start_date
 
-        # Parse dates to datetime objects (start of day and end of day)
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(
+        # Define MST timezone (UTC-7)
+        mst_offset = timezone(timedelta(hours=-7))
+
+        # Parse dates as MST start/end of day
+        start_dt_naive = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt_naive = datetime.strptime(end_date, "%Y-%m-%d").replace(
             hour=23, minute=59, second=59
         )
+
+        # Make them timezone-aware in MST, then convert to UTC for DB query
+        start_dt_mst = start_dt_naive.replace(tzinfo=mst_offset)
+        end_dt_mst = end_dt_naive.replace(tzinfo=mst_offset)
+
+        start_dt_utc = start_dt_mst.astimezone(timezone.utc)
+        end_dt_utc = end_dt_mst.astimezone(timezone.utc)
 
         events = (
             await CalendarEvent.find(
                 CalendarEvent.user_id == user_id,
-                CalendarEvent.event_datetime >= start_dt,
-                CalendarEvent.event_datetime <= end_dt,
+                CalendarEvent.event_datetime >= start_dt_utc,
+                CalendarEvent.event_datetime <= end_dt_utc,
             )
             .sort("event_datetime")
             .to_list()

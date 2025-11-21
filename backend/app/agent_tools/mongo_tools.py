@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List
 from app.services.mongo_calendar_service import calendar_service
 from app.agent_tools.tool_context import get_current_user_id
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -387,16 +387,22 @@ async def get_todays_schedule() -> dict:
     """
     Get today's schedule for the user.
 
+    'Today' is calculated in MST (UTC-7) to match the user's timezone,
+    ensuring consistency with how events are displayed in the frontend.
+
     Returns:
         dict: Today's events and state update
     """
     user_id = get_current_user_id()
-    today = datetime.now().strftime("%Y-%m-%d")
+    # Calculate "today" in MST (UTC-7)
+    mst_offset = timedelta(hours=-7)
+    today_mst = (datetime.now(timezone.utc) + mst_offset).strftime("%Y-%m-%d")
+
     logger.info("=" * 60)
     logger.info("TOOL: get_todays_schedule")
-    logger.info(f"Parameters: user_id={user_id}, today={today}")
+    logger.info(f"Parameters: user_id={user_id}, today={today_mst} (MST)")
 
-    return await get_events_on_date.ainvoke({"date": today})
+    return await get_events_on_date.ainvoke({"date": today_mst})
 
 
 @tool
