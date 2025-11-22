@@ -5,8 +5,11 @@ Stores message history in MongoDB and manages in-memory conversation state.
 
 from datetime import datetime
 from typing import List, Optional, Dict, Any
+import logging
 from pydantic import BaseModel, Field
 from bson import ObjectId
+
+logger = logging.getLogger(__name__)
 
 
 class Message(BaseModel):
@@ -146,6 +149,9 @@ class ConversationService:
 
         # Deep merge the partial update
         state_dict = self._deep_merge(state_dict, partial_update)
+        logger.info(
+            f"[CONVERSATION SERVICE] Updated state for user {user_id}: final state\n{state_dict}"
+        )
 
         # Update the in-memory state
         self.conversation_states[user_id] = ConversationState(**state_dict)
@@ -155,19 +161,25 @@ class ConversationService:
         """Reset the conversation state for a user."""
         self.conversation_states[user_id] = ConversationState()
 
-    async def reset_transient_state(self, user_id: str) -> None:
+    async def reset_transient_state(self, user_id: str) -> Dict[str, Any]:
         """
         Reset only transient conversation state, preserving user_profile.
         Called when starting a new conversation after a declarative message.
         Also marks all messages from current session as old and generates new session_id.
+
+        Returns:
+            dict: Information about the reset including messages_marked_old and new_session_id
         """
         current_state = self.get_conversation_state(user_id)
         preserved_profile = current_state.user_profile.copy()
         current_session_id = current_state.session_id
 
         # Mark all messages from current session as old
+        messages_marked_old = 0
         if current_session_id:
-            await self.mark_messages_as_old(user_id, current_session_id)
+            messages_marked_old = await self.mark_messages_as_old(
+                user_id, current_session_id
+            )
 
         # Generate new session_id for next conversation
         new_session_id = str(ObjectId())
@@ -176,6 +188,11 @@ class ConversationService:
         self.conversation_states[user_id] = ConversationState(
             user_profile=preserved_profile, session_id=new_session_id
         )
+
+        return {
+            "messages_marked_old": messages_marked_old,
+            "new_session_id": new_session_id,
+        }
 
     async def mark_messages_as_old(self, user_id: str, session_id: str) -> int:
         """

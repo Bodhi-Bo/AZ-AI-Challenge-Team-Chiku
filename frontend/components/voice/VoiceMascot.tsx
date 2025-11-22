@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, Transition } from "framer-motion";
+import SmoothVideoMascot from "../mascot/SmoothVideoMascot";
 
 interface VoiceMascotProps {
   status: "idle" | "listening" | "speaking" | "thinking";
@@ -11,6 +12,20 @@ export default function VoiceMascot({
   status,
   className = "",
 }: VoiceMascotProps) {
+  // Map status to video
+  const getVideoSrc = (): "normal" | "speak" | "think" => {
+    switch (status) {
+      case "speaking":
+        return "speak";
+      case "thinking":
+        return "think";
+      case "listening":
+      case "idle":
+      default:
+        return "normal";
+    }
+  };
+
   // ✅ FIX: Proper typing for transitions
   const getTransition = (): Transition => {
     switch (status) {
@@ -18,7 +33,7 @@ export default function VoiceMascot({
         return {
           duration: 4,
           repeat: Infinity,
-          ease: "easeInOut" as const, // ✅ Use 'as const'
+          ease: "easeInOut" as const,
         };
       case "listening":
         return {
@@ -73,28 +88,15 @@ export default function VoiceMascot({
       animate={getAnimation()}
       transition={getTransition()}
     >
-      {/* Glow Effect */}
-      <motion.div
-        className="absolute inset-0 blur-3xl opacity-50"
-        animate={{
-          scale: status === "listening" ? [1, 1.2, 1] : [1, 1.1, 1],
-          opacity: status === "listening" ? [0.3, 0.6, 0.3] : [0.2, 0.4, 0.2],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Infinity,
-          ease: "easeInOut" as const, // ✅ Add 'as const'
-        }}
-        style={{
-          background:
-            status === "speaking"
-              ? "radial-gradient(circle, #764ba2 0%, #667eea 100%)"
-              : "radial-gradient(circle, #667eea 0%, #764ba2 100%)",
-        }}
-      />
-
-      {/* Mascot */}
-      <div className="relative text-[12rem] filter drop-shadow-2xl">🦊</div>
+      {/* Video Mascot with smooth transitions */}
+      <div className="relative">
+        <SmoothVideoMascot
+          videoSrc={getVideoSrc()}
+          width={320}
+          height={320}
+          className=""
+        />
+      </div>
 
       {/* Status Indicator */}
       {status === "listening" && (

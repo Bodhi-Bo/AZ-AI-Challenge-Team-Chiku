@@ -27,7 +27,7 @@ export default function TranscriptionDisplay({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="text-2xl font-medium text-white mb-2"
+            className="text-2xl font-medium text-black mb-2"
           >
             {text}
           </motion.p>
@@ -36,7 +36,7 @@ export default function TranscriptionDisplay({
             key="placeholder"
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.6 }}
-            className="text-xl text-white/60"
+            className="text-xl text-gray-600"
           >
             {isListening ? "Listening..." : "Tap to speak"}
           </motion.p>
@@ -52,7 +52,7 @@ export default function TranscriptionDisplay({
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-2 h-2 rounded-full bg-white"
+              className="w-2 h-2 rounded-full bg-blue-500"
               animate={{
                 scale: [1, 1.5, 1],
                 opacity: [0.4, 1, 0.4],

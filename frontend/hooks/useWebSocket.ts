@@ -2,13 +2,16 @@
 
 import { useEffect, useRef } from 'react';
 import { useChatStore } from '@/lib/stores/chatStore';
+import { useCalendarStore } from '@/lib/stores/calendarStore';
 import { WebSocketService } from '@/lib/api/websocket-service';
 import { ServerMessage } from '@/types';
+import { fetchEventsRange } from '@/lib/api/calendar-api';
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocketService | null>(null);
-  const isInitializedRef = useRef(false);  // ✅ Use ref instead of state
+  const isInitializedRef = useRef(false); // ✅ Use ref instead of state
   const chatStore = useChatStore();
+  const calendarStore = useCalendarStore();
   const userId = process.env.NEXT_PUBLIC_USER_ID || 'user_123';
 
   useEffect(() => {
@@ -19,7 +22,22 @@ export function useWebSocket() {
     }
 
     console.log('🔌 Initializing WebSocket...');
-    isInitializedRef.current = true;  // ✅ Mark as initialized (no re-render)
+    isInitializedRef.current = true; // ✅ Mark as initialized (no re-render)
+
+    // Function to sync calendar
+    const syncCalendar = async () => {
+      console.log('📅 Syncing calendar after message received');
+      try {
+        const events = await fetchEventsRange(
+          userId,
+          calendarStore.selectedDate
+        );
+        calendarStore.setEvents(events);
+        console.log('✅ Calendar synced successfully');
+      } catch (error) {
+        console.error('❌ Failed to sync calendar:', error);
+      }
+    };
 
     const ws = new WebSocketService(userId);
     wsRef.current = ws;
@@ -34,11 +52,13 @@ export function useWebSocket() {
             id: Date.now().toString(),
             role: 'assistant',
             content: data.text,
-            timestamp: new Date()
+            timestamp: new Date(),
           });
           chatStore.setLoading(false);
-        }
-        else if (data.type === 'pong') {
+
+          // Sync calendar after receiving response
+          syncCalendar();
+        } else if (data.type === 'pong') {
           console.log('🏓 Pong received');
         }
       },
@@ -61,9 +81,10 @@ export function useWebSocket() {
         wsRef.current.disconnect();
         wsRef.current = null;
       }
-      isInitializedRef.current = false;  // ✅ Reset on cleanup
+      isInitializedRef.current = false; // ✅ Reset on cleanup
     };
-  }, []);  // ✅ EMPTY DEPS - Only run once!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ✅ EMPTY DEPS - Only run once!
 
   const sendMessage = (text: string) => {
     if (!wsRef.current) {
@@ -78,7 +99,7 @@ export function useWebSocket() {
       id: Date.now().toString(),
       role: 'user',
       content: text,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
 
     // Send to backend

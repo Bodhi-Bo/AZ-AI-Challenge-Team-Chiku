@@ -8,8 +8,10 @@ import TranscriptionDisplay from './TranscriptionDisplay';
 import VoiceControls from './VoiceControls';
 
 import { useVoiceConversation } from '@/hooks/useVoiceConversation';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import VoiceBackground from '../backgrounds/VoiceBackground';
+import { useCalendarStore } from '@/lib/stores/calendarStore';
+import { fetchEventsRange } from '@/lib/api/calendar-api';
 
 interface VoiceModeProps {
   isActive: boolean;
@@ -17,8 +19,29 @@ interface VoiceModeProps {
 }
 
 export default function VoiceMode({ isActive, onClose }: VoiceModeProps) {
+  const calendarStore = useCalendarStore();
+  const userId = process.env.NEXT_PUBLIC_USER_ID || 'user_123';
+
+  // Refresh calendar when backend sends a message
+  const handleMessageReceived = useCallback(
+    async (message: string) => {
+      console.log('📅 Syncing calendar after receiving message:', message);
+      try {
+        const events = await fetchEventsRange(
+          userId,
+          calendarStore.selectedDate
+        );
+        calendarStore.setEvents(events);
+        console.log('✅ Calendar synced successfully');
+      } catch (error) {
+        console.error('❌ Failed to sync calendar:', error);
+      }
+    },
+    [userId, calendarStore]
+  );
+
   const { phase, transcription, isListening, isSpeaking, start, stop } =
-    useVoiceConversation();
+    useVoiceConversation({ onMessageReceived: handleMessageReceived });
 
   // Auto-start/stop with lifecycle
   useEffect(() => {
@@ -35,6 +58,18 @@ export default function VoiceMode({ isActive, onClose }: VoiceModeProps) {
     onClose();
   };
 
+  // Map phase to mascot status
+  const getMascotStatus = ():
+    | 'idle'
+    | 'listening'
+    | 'speaking'
+    | 'thinking' => {
+    if (phase === 'thinking') return 'thinking';
+    if (isSpeaking) return 'speaking';
+    if (isListening) return 'listening';
+    return 'idle';
+  };
+
   return (
     <AnimatePresence>
       {isActive && (
@@ -46,19 +81,14 @@ export default function VoiceMode({ isActive, onClose }: VoiceModeProps) {
 
               <div className='relative z-10 h-full flex flex-col items-center justify-center p-8'>
                 {/* Animated Mascot */}
-                <VoiceMascot
-                  status={
-                    isSpeaking ? 'speaking' : isListening ? 'listening' : 'idle'
-                  }
-                  className='mb-12'
-                />
+                <VoiceMascot status={getMascotStatus()} className='mb-12' />
 
-                {/* Waveform Visualization */}
+                {/* Waveform Visualization
                 <WaveformVisualizer
                   audioStream={null}
                   isActive={isListening || isSpeaking}
-                  className='mb-8'
-                />
+                  className="mb-8"
+                /> */}
 
                 {/* Live Transcription */}
                 <TranscriptionDisplay
@@ -73,10 +103,6 @@ export default function VoiceMode({ isActive, onClose }: VoiceModeProps) {
                   onToggle={isListening ? stop : start}
                   onEnd={handleClose}
                 />
-
-                <div className='text-xs text-muted-foreground mt-4'>
-                  Phase: {phase}
-                </div>
               </div>
             </div>
           </div>

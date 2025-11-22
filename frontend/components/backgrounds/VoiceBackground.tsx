@@ -2,18 +2,34 @@
 import { motion } from "framer-motion";
 
 /**
- * This is a light, cloud-themed background for immersive voice mode.
+ * Clean white background with subtle blue gradient accents for voice mode.
  */
 export default function VoiceBackground() {
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      {/* Light blue gradient base */}
+    <div className="absolute inset-0 overflow-hidden bg-white">
+      {/* Subtle blue gradient accent in top corner */}
       <motion.div
-        className="absolute inset-0"
+        className="absolute top-0 right-0 w-1/3 h-1/3 opacity-20"
         animate={{
           background: [
-            "linear-gradient(140deg, #e3f0ff 0%, #b3caff 70%, #e5efff 100%)",
-            "linear-gradient(120deg, #e5efff 0%, #c3eaff 60%, #b3caff 100%)",
+            "radial-gradient(circle at top right, #e3f0ff 0%, transparent 70%)",
+            "radial-gradient(circle at top right, #dae7ff 0%, transparent 65%)",
+          ],
+        }}
+        transition={{
+          duration: 8,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+      />
+
+      {/* Subtle blue gradient accent in bottom corner */}
+      <motion.div
+        className="absolute bottom-0 left-0 w-1/3 h-1/3 opacity-15"
+        animate={{
+          background: [
+            "radial-gradient(circle at bottom left, #e8f2ff 0%, transparent 70%)",
+            "radial-gradient(circle at bottom left, #dce9ff 0%, transparent 65%)",
           ],
         }}
         transition={{
@@ -21,31 +37,7 @@ export default function VoiceBackground() {
           repeat: Infinity,
           ease: "easeInOut",
         }}
-        style={{ zIndex: 1 }}
       />
-      {/* Animated floating clouds */}
-      {[...Array(4)].map((_, i) => (
-        <motion.div
-          key={i}
-          className="absolute rounded-2xl opacity-30 blur-xl"
-          style={{
-            width: `${150 + i * 80}px`,
-            height: `${55 + i * 40}px`,
-            bottom: `${20 + i * 25}%`,
-            left: `${6 + i * 24}%`,
-            background: "white",
-          }}
-          animate={{
-            x: [0, 24, -18, 0],
-            y: [0, -14, 0],
-          }}
-          transition={{
-            duration: 14 + i * 4,
-            repeat: Infinity,
-            ease: "easeInOut",
-          }}
-        />
-      ))}
     </div>
   );
 }

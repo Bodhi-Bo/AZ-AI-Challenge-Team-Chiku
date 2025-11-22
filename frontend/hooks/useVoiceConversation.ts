@@ -1,273 +1,192 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import { useElevenLabsStream } from '@/components/voice/useElevenLabsStream';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useSpeechRecognition } from './useSpeechRecognition';
+import { useElevenLabs } from './useElevenLabs';
 
 type Phase = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+
+interface UseVoiceConversationOptions {
+  onMessageReceived?: (message: string) => void;
+}
 
 interface UseVoiceConversationReturn {
   phase: Phase;
   transcription: string;
   isListening: boolean;
   isSpeaking: boolean;
-  start: () => Promise<void>;
+  start: () => void;
   stop: () => void;
   error: string | null;
 }
 
-// Helper to sleep
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export function useVoiceConversation(): UseVoiceConversationReturn {
+export function useVoiceConversation(
+  options?: UseVoiceConversationOptions
+): UseVoiceConversationReturn {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [transcription, setTranscription] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousSpeakingRef = useRef(false);
+  const lastSentMessageRef = useRef('');
   const isActiveRef = useRef(false);
 
-  // TTS integration
   const {
-    isSpeaking,
-    speak,
-    stopSpeaking,
-    error: ttsError,
-  } = useElevenLabsStream();
+    transcript,
+    isListening,
+    isFinal,
+    startListening,
+    stopListening,
+    resetTranscript,
+  } = useSpeechRecognition();
 
-  // Clean up mic and recognition
-  const cleanupMic = useCallback(() => {
-    // Stop recognition
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch {}
-      recognitionRef.current = null;
-    }
-
-    // Stop media stream
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-
-    // Clear timers
-    if (silenceTimerRef.current) {
-      clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
-  }, []);
-
-  // Start listening for user speech
-  const startListening = useCallback(async (): Promise<string> => {
-    console.log('🎤 [Voice] Starting to listen...');
-
-    // Don't start if TTS is still speaking
-    if (isSpeaking) {
-      console.warn('⛔ [Voice] Cannot listen while speaking');
-      throw new Error('Cannot listen while speaking');
-    }
-
-    setPhase('listening');
-    setTranscription('');
-
-    return new Promise<string>(async (resolve, reject) => {
-      try {
-        // Request microphone access
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
-        mediaStreamRef.current = stream;
-
-        // Initialize speech recognition
-        const SpeechRecognitionAPI =
-          window.SpeechRecognition || window.webkitSpeechRecognition;
-
-        if (!SpeechRecognitionAPI) {
-          throw new Error('Speech recognition not supported in this browser');
-        }
-
-        const recognition = new SpeechRecognitionAPI();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = 'en-US';
-        recognitionRef.current = recognition;
-
-        let finalTranscript = '';
-
-        recognition.onresult = (event: SpeechRecognitionEvent) => {
-          // Clear silence timer on any speech
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current);
-          }
-
-          let interimText = '';
-          let newFinal = '';
-
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            if (event.results[i].isFinal) {
-              newFinal += transcript;
-            } else {
-              interimText += transcript;
-            }
-          }
-
-          // Update final transcript
-          if (newFinal) {
-            finalTranscript += newFinal + ' ';
-          }
-
-          // Show live transcription
-          setTranscription((finalTranscript + interimText).trim());
-
-          // If we got final text, wait for silence before ending
-          if (newFinal) {
-            silenceTimerRef.current = setTimeout(() => {
-              console.log('🔇 [Voice] Silence detected, ending listening');
-              cleanupMic();
-              const result = finalTranscript.trim();
-              if (result) {
-                resolve(result);
-              } else {
-                reject(new Error('No speech detected'));
-              }
-            }, 1500); // 1.5s silence threshold
-          }
-        };
-
-        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-          console.error('❌ [Voice] Recognition error:', event.error);
-          cleanupMic();
-          reject(new Error(`Speech recognition error: ${event.error}`));
-        };
-
-        recognition.onend = () => {
-          console.log('🏁 [Voice] Recognition ended');
-        };
-
-        recognition.start();
-
-        // Safety timeout: max 15 seconds of listening
-        setTimeout(() => {
-          if (recognitionRef.current) {
-            console.warn('⏱️ [Voice] Safety timeout reached');
-            cleanupMic();
-            const result = finalTranscript.trim();
-            if (result) {
-              resolve(result);
-            } else {
-              reject(new Error('No speech within timeout'));
-            }
-          }
-        }, 15000);
-      } catch (err) {
-        cleanupMic();
-        reject(err);
-      }
-    });
-  }, [isSpeaking, cleanupMic]);
+  const { speak, isSpeaking, error: ttsError } = useElevenLabs();
 
   // Query the server with user input
   const queryServer = useCallback(async (message: string): Promise<string> => {
     console.log('💬 [Voice] Querying server:', message);
 
-    const response = await fetch('/api/voice-stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
-    });
+    try {
+      const response = await fetch('/api/voice-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ [Voice] Server error:', response.status, errorText);
-      throw new Error(`Server request failed: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Server request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const reply = data.response || data.reply || '';
+
+      if (!reply) {
+        throw new Error('Server returned empty response');
+      }
+
+      console.log('✅ [Voice] Server replied:', reply);
+      return reply;
+    } catch (err) {
+      console.error('❌ [Voice] Server error:', err);
+      throw err;
     }
-
-    const data = await response.json();
-    console.log('📦 [Voice] Server response data:', data);
-
-    const reply = data.response || data.reply || '';
-    console.log('💬 [Voice] Extracted reply:', reply);
-
-    if (!reply) {
-      throw new Error('Server returned empty response');
-    }
-
-    return reply;
   }, []);
 
-  // Run one complete conversation turn
-  const conversationTurn = useCallback(async () => {
-    if (!isActiveRef.current) return;
+  // Handle AI speaking state changes (echo prevention + auto-resume)
+  useEffect(() => {
+    const wasSpeaking = previousSpeakingRef.current;
+    const isCurrentlySpeaking = isSpeaking;
 
-    try {
-      // Step 1: Listen for user input
-      const userInput = await startListening();
-      console.log('✅ [Voice] User said:', userInput);
+    console.log(`🔊 Speaking: ${wasSpeaking} → ${isCurrentlySpeaking}`);
+    previousSpeakingRef.current = isCurrentlySpeaking;
 
-      if (!isActiveRef.current) return;
-
-      // Step 2: Query server
-      setPhase('thinking');
-      const serverResponse = await queryServer(userInput);
-      console.log('✅ [Voice] Server replied:', serverResponse);
-      console.log('📏 [Voice] Response length:', serverResponse?.length);
-
-      if (!isActiveRef.current) return;
-
-      // Step 3: Speak response
-      setPhase('speaking');
-      console.log('🎙️ [Voice] About to call speak() with:', serverResponse);
-      await speak(serverResponse);
-      console.log('✅ [Voice] Finished speaking');
-
-      if (!isActiveRef.current) return;
-
-      // Step 4: Cooldown to prevent echo
-      console.log('⏳ [Voice] Cooldown...');
-      await sleep(800);
-
-      if (!isActiveRef.current) return;
-
-      // Step 5: Start next turn
-      setPhase('idle');
-      setTranscription('');
-
-      // Small delay before restarting
-      await sleep(200);
-
-      if (isActiveRef.current) {
-        conversationTurn(); // Next turn
-      }
-    } catch (err) {
-      console.error('❌ [Voice] Conversation turn error:', err);
-
-      if (isActiveRef.current) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        setPhase('error');
-
-        // Try to recover after error
-        await sleep(2000);
-        if (isActiveRef.current) {
-          setError(null);
-          setPhase('idle');
-          await sleep(500);
-          if (isActiveRef.current) {
-            conversationTurn(); // Retry
-          }
-        }
+    // AI started speaking - stop mic to prevent echo
+    if (!wasSpeaking && isCurrentlySpeaking) {
+      console.log('🔇 AI started speaking - stopping mic');
+      if (isListening) {
+        stopListening();
       }
     }
-  }, [startListening, queryServer, speak]);
 
-  // Start the conversation loop
-  const start = useCallback(async () => {
+    // AI finished speaking
+    if (wasSpeaking && !isCurrentlySpeaking) {
+      console.log('🎤 AI finished speaking');
+
+      // Only auto-resume if conversation is active
+      if (isActiveRef.current) {
+        setPhase('idle');
+
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            console.log('🔄 Auto-resuming microphone...');
+            setPhase('listening');
+            startListening();
+          }
+        }, 1000);
+      }
+    }
+  }, [isSpeaking, isListening, stopListening, startListening]);
+
+  // Handle sending messages when user pauses
+  useEffect(() => {
+    if (!isFinal || !transcript || !isActiveRef.current) return;
+    if (phase === 'thinking' || phase === 'speaking') return;
+
+    // Prevent duplicate sends
+    if (transcript === lastSentMessageRef.current) {
+      console.log('⏭️ Skipping duplicate message');
+      resetTranscript();
+      return;
+    }
+
+    const sendMessage = async () => {
+      console.log('📤 Sending:', transcript);
+      lastSentMessageRef.current = transcript;
+
+      setPhase('thinking');
+      stopListening();
+
+      try {
+        const response = await queryServer(transcript);
+
+        if (!isActiveRef.current) return;
+
+        // Trigger calendar sync callback if provided
+        if (options?.onMessageReceived) {
+          console.log('📅 Triggering calendar sync after message received');
+          options.onMessageReceived(response);
+        }
+
+        // Stay in 'thinking' phase until audio actually starts playing
+        await speak(response, () => {
+          // This callback is called when audio starts playing
+          if (isActiveRef.current) {
+            console.log('🔊 Audio started - changing to speaking phase');
+            setPhase('speaking');
+          }
+        });
+      } catch (err) {
+        console.error('❌ Send error:', err);
+        setError(
+          err instanceof Error ? err.message : 'Failed to process message'
+        );
+        setPhase('error');
+
+        // Auto-recover from error
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            setError(null);
+            setPhase('listening');
+            startListening();
+          }
+        }, 2000);
+      } finally {
+        resetTranscript();
+      }
+    };
+
+    sendMessage();
+  }, [
+    isFinal,
+    transcript,
+    phase,
+    queryServer,
+    speak,
+    stopListening,
+    resetTranscript,
+    startListening,
+    options,
+  ]);
+
+  // Sync TTS errors
+  useEffect(() => {
+    if (ttsError) {
+      setError(ttsError);
+      setPhase('error');
+    }
+  }, [ttsError]);
+
+  // Start voice conversation
+  const start = useCallback(() => {
     if (isActiveRef.current) {
       console.log('⏩ [Voice] Already active');
       return;
@@ -276,37 +195,31 @@ export function useVoiceConversation(): UseVoiceConversationReturn {
     console.log('🚀 [Voice] Starting conversation');
     isActiveRef.current = true;
     setError(null);
-    setPhase('idle');
+    setPhase('listening');
 
-    // Small delay to ensure UI is ready
-    await sleep(100);
+    // Start listening after small delay
+    setTimeout(() => {
+      if (isActiveRef.current) {
+        startListening();
+      }
+    }, 500);
+  }, [startListening]);
 
-    if (isActiveRef.current) {
-      conversationTurn();
-    }
-  }, [conversationTurn]);
-
-  // Stop the conversation loop
+  // Stop voice conversation
   const stop = useCallback(() => {
     console.log('🛑 [Voice] Stopping conversation');
     isActiveRef.current = false;
-    cleanupMic();
-    stopSpeaking();
+    stopListening();
     setPhase('idle');
-    setTranscription('');
+    resetTranscript();
     setError(null);
-  }, [cleanupMic, stopSpeaking]);
-
-  // Sync TTS errors
-  if (ttsError && !error) {
-    setError(ttsError);
-    setPhase('error');
-  }
+    lastSentMessageRef.current = '';
+  }, [stopListening, resetTranscript]);
 
   return {
     phase,
-    transcription,
-    isListening: phase === 'listening',
+    transcription: transcript,
+    isListening,
     isSpeaking,
     start,
     stop,

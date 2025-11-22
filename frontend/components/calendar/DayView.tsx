@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useEffect, useRef } from "react";
 import type { Task } from "@/lib/stores/calendarStore";
 import TaskCard from "./TaskCard";
+import { convertToMST } from "@/lib/timezone";
 
 interface DayViewProps {
   date: Date;
@@ -29,16 +30,20 @@ export default function DayView({
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const hourHeight = 80; // Height of each hour slot in pixels
 
-  // Check if current time is today
-  const isToday = isSameDay(date, currentTime);
+  // Convert all times to MST
+  const mstDate = convertToMST(date);
+  const mstCurrentTime = convertToMST(currentTime);
 
-  // Use targetTime if provided, otherwise use currentTime
-  const timeToScrollTo = targetTime || currentTime;
+  // Check if current time is today
+  const isToday = isSameDay(mstDate, mstCurrentTime);
+
+  // Use targetTime if provided, otherwise use currentTime (convert to MST)
+  const timeToScrollTo = targetTime ? convertToMST(targetTime) : mstCurrentTime;
   const targetHour = timeToScrollTo.getHours();
   const targetMinute = timeToScrollTo.getMinutes();
 
-  const currentHour = currentTime.getHours();
-  const currentMinute = currentTime.getMinutes();
+  const currentHour = mstCurrentTime.getHours();
+  const currentMinute = mstCurrentTime.getMinutes();
 
   // Custom smooth scroll function with adjustable duration and advanced easing
   const smoothScrollTo = (
@@ -87,7 +92,7 @@ export default function DayView({
           smoothScrollTo(
             scrollContainerRef.current,
             Math.max(0, scrollTop),
-            1800
+            300
           );
         }
       }, 400);
@@ -96,8 +101,8 @@ export default function DayView({
 
   // Calculate which hours a task occupies
   const getTaskSpan = (task: Task) => {
-    const startTime = parseISO(task.startTime);
-    const endTime = parseISO(task.endTime);
+    const startTime = convertToMST(parseISO(task.startTime));
+    const endTime = convertToMST(parseISO(task.endTime));
     const startHour = startTime.getHours();
     const startMinute = startTime.getMinutes();
     const endHour = endTime.getHours();
@@ -136,7 +141,7 @@ export default function DayView({
   // Get tasks that START at this hour
   const getTasksStartingAtHour = (hour: number) => {
     return tasks.filter((task) => {
-      const taskStart = parseISO(task.startTime);
+      const taskStart = convertToMST(parseISO(task.startTime));
       return taskStart.getHours() === hour;
     });
   };
@@ -168,7 +173,7 @@ export default function DayView({
           <div className="w-3 h-3 rounded-full bg-red-500 ml-2 shadow-md z-10" />
           <div className="flex-1 h-[2px] bg-red-500 shadow-sm" />
           <span className="text-xs font-semibold text-red-500 mr-4 bg-white px-2 py-1 rounded-md shadow-md">
-            {format(currentTime, "h:mm a")}
+            {format(mstCurrentTime, "h:mm a")} MST
           </span>
         </motion.div>
       )}
@@ -196,7 +201,11 @@ export default function DayView({
               {/* Time Label */}
               <div className="w-24 flex-shrink-0 p-3 text-right bg-gradient-to-r from-blue-50/50 to-transparent">
                 <span className="text-sm font-medium text-gray-600">
-                  {format(new Date().setHours(hour, 0, 0, 0), "h:mm a")}
+                  {(() => {
+                    const hourDate = new Date();
+                    hourDate.setHours(hour, 0, 0, 0);
+                    return format(convertToMST(hourDate), "h:mm a");
+                  })()}
                 </span>
               </div>
 
