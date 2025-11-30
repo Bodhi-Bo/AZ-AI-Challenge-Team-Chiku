@@ -1,7 +1,6 @@
 # Chiku — Personal Executive Assistant 🧠✨
 
 ![Status](https://img.shields.io/badge/Status-Semi%20Finalist-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
 ![Platform](https://img.shields.io/badge/Platform-Azure%20AI%20Challenge-purple)
 
 > **A compassionate AI executive assistant designed specifically for neurodivergent individuals with ADHD**
@@ -324,99 +323,6 @@ AZ-AI-Challenge-Team-Chiku/
 │
 └── README.md
 ```
-
----
-
-## 🔮 Roadmap
-
-### Phase 1 (Q1 2026)
-
-- [ ] Google Calendar OAuth integration
-- [ ] Mobile app (iOS + Android)
-- [ ] Habit tracking
-- [ ] Energy level tracking
-
-### Phase 2 (Q2 2026)
-
-- [ ] Predictive scheduling
-- [ ] Goal hierarchies
-- [ ] Progress analytics
-- [ ] Team collaboration
-
-### Phase 3 (Q3 2026)
-
-- [ ] Integrations (Todoist, Notion, Slack)
-- [ ] Smart home integration
-- [ ] Wearable support
-
-### Phase 4 (Q4 2026)
-
-- [ ] Clinical studies
-- [ ] Multilingual support
-- [ ] Open API for developers
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Process
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📝 Documentation
-
-- **[Full Technical Documentation](CHIKU_PROJECT_DOCUMENTATION.md)** — Complete architecture guide
-- **[Backend README](backend/README.md)** — Backend-specific docs
-- **[Frontend README](frontend/README.md)** — Frontend-specific docs
-- **[API Documentation](http://localhost:8000/docs)** — Interactive API docs (when running)
-
----
-
-## 🙏 Acknowledgments
-
-### Technologies
-
-- OpenAI — GPT-4o language model
-- LangChain & LangGraph — Agent framework
-- ElevenLabs — Voice synthesis
-- Microsoft Azure — Cloud platform
-- MongoDB & Redis — Data storage
-
-### Inspiration
-
-- ADHD community feedback and lived experiences
-- Neurodiversity-affirming design principles
-- Evidence-based productivity research
-
-### Special Thanks
-
-- Azure AI Challenge organizers
-- Beta testers who provided invaluable feedback
-- ADHD advocacy organizations for guidance
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
----
-
-## 📞 Contact
-
-- **GitHub:** [github.com/Bodhi-Bo/AZ-AI-Challenge-Team-Chiku](https://github.com/Bodhi-Bo/AZ-AI-Challenge-Team-Chiku)
-- **Issues:** [github.com/Bodhi-Bo/AZ-AI-Challenge-Team-Chiku/issues](https://github.com/Bodhi-Bo/AZ-AI-Challenge-Team-Chiku/issues)
-- **Email:** [your-email@example.com]
-
----
 
 <div align="center">
 
